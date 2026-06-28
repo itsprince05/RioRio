@@ -1,0 +1,12 @@
+version: "3.9"
+
+services:
+
+  bot:
+    build: .
+    container_name: pocketfm_bot
+    restart: always
+    volumes:
+      - ./downloads:/app/downloads
+      - ./l3.wvd:/app/l3.wvd
+      - ./pocketfm.db:/app/pocketfm.db
