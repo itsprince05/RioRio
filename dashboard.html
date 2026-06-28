@@ -1,0 +1,734 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RioRio Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            color: #1c1e21;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .action-bar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-sizing: border-box;
+            height: 48px;
+            background: #2481cc;
+            color: white;
+            padding: 0 10px;
+            gap: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .navbar-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            color: #2481cc;
+        }
+
+        .navbar-title {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .tabs-container {
+            display: flex;
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 12px 0;
+            font-weight: 600;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: 0.2s;
+        }
+
+        .tab:hover {
+            background: #f8f9fa;
+        }
+
+        .tab.active {
+            color: #2481cc;
+            background: #eef5fb;
+            border-bottom: 2px solid #2481cc;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            margin-bottom: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .card h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #1c1e21;
+            margin-bottom: 5px;
+        }
+
+        input,
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 14px;
+            outline: none;
+        }
+
+        input:focus,
+        textarea:focus {
+            border-color: #2481cc;
+        }
+
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        textarea::-webkit-scrollbar {
+            display: none;
+        }
+
+        textarea {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .primary-btn {
+            width: 100%;
+            padding: 12px;
+            background: #2481cc;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .primary-btn:hover {
+            background: #1e6eb0;
+        }
+
+        .item-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            background: #ffffff;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+        }
+
+        .list-card {
+            background: transparent;
+            border-radius: 0;
+            padding: 10px;
+            border: none;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .list-card:last-child {
+            border-bottom: none;
+        }
+
+        .list-title {
+            font-weight: 600;
+            font-size: 15px;
+            color: #1c1e21;
+        }
+
+        .list-subtitle {
+            font-size: 13px;
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .icon-btn {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .delete-btn {
+            background: #fff5f5;
+            color: #fa5252;
+        }
+
+        .action-btn {
+            background: #fff5f5;
+            color: #fa5252;
+        }
+
+        .action-btn.paused {
+            background: #e6ffe6;
+            color: #2b8a3e;
+        }
+
+        #delete-popup {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .popup-box {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            width: calc(100% - 40px);
+            max-width: 320px;
+            box-sizing: border-box;
+        }
+
+        .popup-box h3 {
+            margin-top: 0;
+            color: #1c1e21;
+            margin-bottom: 20px;
+        }
+
+        .popup-box p {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .popup-btns {
+            display: flex;
+            gap: 20px;
+        }
+
+        .popup-btns button {
+            flex: 1;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .cancel-btn {
+            background: #f0f2f5;
+            color: #333;
+        }
+
+        .confirm-btn {
+            background: #fa5252;
+            color: #fff;
+        }
+
+        .checkbox {
+            width: 20px;
+            height: 20px;
+        }
+
+        .user-shows-tab-content {
+            display: none;
+        }
+
+        .user-shows-tab-content.active {
+            display: block;
+        }
+
+        @keyframes spin {
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .lucide-loader {
+            animation: spin 1s linear infinite;
+        }
+
+        #global-loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100vh;
+            background: #f0f2f5;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 99999;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="global-loader">
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2481cc"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+            class="lucide lucide-loader-icon lucide-loader">
+            <path d="M12 2v4" />
+            <path d="m16.2 7.8 2.9-2.9" />
+            <path d="M18 12h4" />
+            <path d="m16.2 16.2 2.9 2.9" />
+            <path d="M12 18v4" />
+            <path d="m4.9 19.1 2.9-2.9" />
+            <path d="M2 12h4" />
+            <path d="m4.9 4.9 2.9 2.9" />
+        </svg>
+    </div>
+    <div id="main-page">
+        <div class="action-bar">
+            <div class="navbar-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m12 14 9-5-9-5-9 5 9 5z" />
+                    <path d="m12 14-9-5 9-5 9 5-9 5z" />
+                    <path d="m12 14 9-5-9-5-9 5 9 5z" />
+                    <path d="m12 21 9-5-9-5-9 5 9 5z" />
+                    <path d="m12 21-9-5 9-5 9 5-9 5z" />
+                </svg>
+            </div>
+            <div class="navbar-title">RioRio Dashboard</div>
+        </div>
+
+        <div class="tabs-container">
+            <div class="tab active" onclick="switchTab('buyers', event)">Buyers</div>
+            <div class="tab" onclick="switchTab('users', event)">Users</div>
+            <div class="tab" onclick="switchTab('groups', event)">Groups</div>
+        </div>
+
+        <div class="container">
+
+            <!-- BUYERS TAB -->
+            <div id="buyers" class="tab-content active">
+                <div id="buyersCount" style="font-size: 13px; color: #666; font-weight: 600; padding: 0 0 10px 0;">
+                </div>
+                <div class="item-list" id="buyersTable"></div>
+            </div>
+
+            <!-- USERS TAB -->
+            <div id="users" class="tab-content">
+                <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+                    <input type="number" id="manualUserId" placeholder="Enter user ID" style="flex: 3; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; outline: none; transition: border-color 0.2s;" onfocus="this.style.borderColor='#2481cc';" onblur="this.style.borderColor='#ddd';">
+                    <button onclick="openManualUser()" class="primary-btn" style="flex: 2; padding: 10px 15px; font-size: 14px; margin: 0;">Open User</button>
+                </div>
+                <div id="usersCount" style="font-size: 13px; color: #666; font-weight: 600; padding: 0 0 10px 0;"></div>
+                <div class="item-list" id="usersTable"></div>
+            </div>
+
+            <!-- GROUPS TAB -->
+            <div id="groups" class="tab-content">
+                <div id="groupsCount" style="font-size: 13px; color: #666; font-weight: 600; padding: 0 0 10px 0;"></div>
+                <div style="display: flex; flex-direction: column; gap: 10px;" id="groupsTable"></div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- DELETE POPUP -->
+    <div id="delete-popup">
+        <div class="popup-box">
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete this user?</p>
+            <div class="popup-btns">
+                <button class="cancel-btn" onclick="hideDeletePopup()">Cancel</button>
+                <button id="delete-btn-submit" class="confirm-btn" onclick="confirmDelete()">Delete</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let initialLoadsCompleted = 0;
+        function checkGlobalLoad() {
+            initialLoadsCompleted++;
+            if (initialLoadsCompleted >= 3) {
+                const loader = document.getElementById('global-loader');
+                if (loader) loader.style.display = 'none';
+            }
+        }
+
+        document.addEventListener("keydown", function(e) {
+            if (e.target.type === "number" && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+                e.preventDefault();
+            }
+        });
+
+
+
+        function switchTab(tabId, event) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+
+            if (tabId === 'buyers') loadBuyers();
+            else if (tabId === 'users') loadUsers();
+            else if (tabId === 'groups') loadGroups();
+        }
+
+        // loadShows removed
+
+        function loadBuyers() {
+            Promise.all([
+                fetch('/api/buyers?_t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()),
+                fetch('/api/users?_t=' + Date.now(), { cache: 'no-store' }).then(r => r.json())
+            ])
+                .then(([buyers, users]) => {
+                    const entries = Object.entries(buyers).sort((a, b) => {
+                        const dateA = new Date(a[1].joined_at || 0);
+                        const dateB = new Date(b[1].joined_at || 0);
+                        return dateB - dateA; // Descending (newest first)
+                    });
+                    document.getElementById('buyersCount').textContent = entries.length + ' Users';
+                    const container = document.getElementById('buyersTable');
+                    container.innerHTML = '';
+                    entries.forEach(([uid, data]) => {
+                        const userData = users[uid] || {};
+                        const rawName = data.name || userData.name;
+                        const isDummy = (!rawName || rawName === 'Unknown');
+                        const name = isDummy ? 'Unknown' : rawName;
+                        const username = userData.username ? ` @${userData.username}` : '';
+                        
+                        const titleColor = isDummy ? 'color: #999;' : 'color: #1c1e21;';
+                        const subColor = isDummy ? 'color: #bbb;' : 'color: #666;';
+
+                        const bgStyle = data.is_expired ? 'background: linear-gradient(to right, #fde3e1, #ffffff); box-shadow: inset 4px 0 0 0 #f44336;' : 'background: linear-gradient(to right, #e4f3e5, #ffffff); box-shadow: inset 4px 0 0 0 #4CAF50;';
+                        container.innerHTML += `
+                        <div class="list-card" style="cursor: pointer; padding: 10px; ${bgStyle}" 
+                             oncontextmenu="event.preventDefault(); showDeletePopup('${uid}', 'buyer', '${name.replace(/'/g, "\\'")}'); return false;"
+                             ontouchstart="startLongPress(event, '${uid}', 'buyer', '${name.replace(/'/g, "\\'")}')" 
+                             ontouchend="cancelLongPress(event)" 
+                             ontouchmove="cancelLongPress(event)" 
+                             onmousedown="startLongPress(event, '${uid}', 'buyer', '${name.replace(/'/g, "\\'")}')" 
+                             onmouseup="cancelLongPress(event)" 
+                             onmouseleave="cancelLongPress(event)"
+                             onclick="if(window.isLongPressing) { window.isLongPressing=false; return; } window.location.href='/user/${uid}'">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1; overflow: hidden; margin-left: 5px;">
+                                ${data.avatar_v > 0 
+                                    ? `<img src="/api/avatars/${uid}?_t=${data.avatar_v}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                                       <div style="display: none; width: 40px; height: 40px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0;">
+                                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-round-icon lucide-user-round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                                       </div>`
+                                    : `<div style="display: flex; width: 40px; height: 40px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0;">
+                                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-round-icon lucide-user-round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                                       </div>`
+                                }
+                                <div style="flex: 1; overflow: hidden;">
+                                    <div class="list-title" style="${titleColor}">${name}</div>
+                                    <div class="list-subtitle" style="${subColor}">${uid}${username}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    });
+                }).finally(() => { checkGlobalLoad(); });
+        }
+
+        function loadUsers() {
+            Promise.all([
+                fetch('/api/buyers?_t=' + Date.now(), { cache: 'no-store' }).then(r => r.json()),
+                fetch('/api/users?_t=' + Date.now(), { cache: 'no-store' }).then(r => r.json())
+            ])
+                .then(([buyers, users]) => {
+                    const entries = Object.entries(users).sort((a, b) => {
+                        const dateA = new Date(a[1].joined_at || 0);
+                        const dateB = new Date(b[1].joined_at || 0);
+                        return dateB - dateA; // Descending (newest first)
+                    });
+                    document.getElementById('usersCount').textContent = entries.length + ' Users';
+                    const container = document.getElementById('usersTable');
+                    container.innerHTML = '';
+                    entries.forEach(([uid, userData]) => {
+                        const rawName = userData.name;
+                        const isDummy = (!rawName || rawName === 'Unknown');
+                        const name = isDummy ? 'Unknown' : rawName;
+                        const username = userData.username ? ` @${userData.username}` : '';
+                        
+                        const titleColor = isDummy ? 'color: #999;' : 'color: #1c1e21;';
+                        const subColor = isDummy ? 'color: #bbb;' : 'color: #666;';
+
+                        const isBuyer = buyers.hasOwnProperty(uid);
+                        let bgStyle = '';
+                        if (isBuyer) {
+                            const isExpired = buyers[uid].is_expired;
+                            bgStyle = isExpired ? 'background: linear-gradient(to right, #fde3e1, #ffffff); box-shadow: inset 4px 0 0 0 #f44336;' : 'background: linear-gradient(to right, #e4f3e5, #ffffff); box-shadow: inset 4px 0 0 0 #4CAF50;';
+                        } else {
+                            bgStyle = 'background: #ffffff; box-shadow: inset 4px 0 0 0 #ffffff;';
+                        }
+
+                        container.innerHTML += `
+                        <div class="list-card" style="${bgStyle}; cursor: pointer; padding: 10px;"
+                             onclick="window.location.href='${isBuyer ? '/user/' + uid : '/new_buyer/' + uid}'">
+                            <div style="display: flex; align-items: center; gap: 10px; flex: 1; overflow: hidden; margin-left: 5px;">
+                                ${userData.avatar_v > 0 
+                                    ? `<img src="/api/avatars/${uid}?_t=${userData.avatar_v}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                                       <div style="display: none; width: 40px; height: 40px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0;">
+                                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-round-icon lucide-user-round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                                       </div>`
+                                    : `<div style="display: flex; width: 40px; height: 40px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0;">
+                                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-round-icon lucide-user-round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                                       </div>`
+                                }
+                                <div style="flex: 1; overflow: hidden;">
+                                    <div class="list-title" style="${titleColor}">${name}</div>
+                                    <div class="list-subtitle" style="${subColor}">${uid}${username}</div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                    });
+                }).finally(() => { checkGlobalLoad(); });
+        }
+
+        window.longPressTimeout = null;
+        window.isLongPressing = false;
+
+        function startLongPress(e, uid, type, name) {
+            window.isLongPressing = false;
+            window.longPressTimeout = setTimeout(() => {
+                window.isLongPressing = true;
+                showDeletePopup(uid, type, name);
+            }, 600);
+        }
+
+        function cancelLongPress(e) {
+            if (window.longPressTimeout) {
+                clearTimeout(window.longPressTimeout);
+                window.longPressTimeout = null;
+            }
+        }
+
+        // toggleBuyer removed
+
+        // Add show scripts removed
+
+        let itemToDelete = null;
+        let itemToDeleteId = null;
+        let itemToDeleteType = null;
+        let deleteTimer = null;
+
+        function showDeletePopup(id, type, name) {
+            itemToDeleteId = id;
+            itemToDeleteType = type;
+            document.getElementById('delete-popup').style.display = 'flex';
+
+            const popupDesc = document.querySelector('#delete-popup p');
+            popupDesc.innerHTML = `Are you sure you want to delete...<br><span style="font-weight: 600; color: #1c1e21;">${name}</span>`;
+
+            const btn = document.getElementById('delete-btn-submit');
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+            let count = 5;
+            btn.textContent = `Delete (${count})`;
+            if (deleteTimer) clearInterval(deleteTimer);
+            deleteTimer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    btn.textContent = `Delete (${count})`;
+                } else {
+                    clearInterval(deleteTimer);
+                    btn.textContent = 'Delete';
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                }
+            }, 1000);
+        }
+
+        function hideDeletePopup() {
+            document.getElementById('delete-popup').style.display = 'none';
+            itemToDeleteId = null;
+            itemToDeleteType = null;
+            if (deleteTimer) clearInterval(deleteTimer);
+        }
+
+        function confirmDelete() {
+            if (!itemToDeleteId || !itemToDeleteType) return;
+
+            let url = `/api/${itemToDeleteType}s/${itemToDeleteId}`;
+
+            fetch(url, { method: 'DELETE' })
+                .then(r => r.json())
+                .then(res => {
+                    const type = itemToDeleteType;
+                    hideDeletePopup();
+                    if (type === 'user' || type === 'buyer') {
+                        loadUsers();
+                        loadBuyers();
+                    }
+                })
+                .catch(err => {
+                    console.error("Delete Error:", err);
+                    hideDeletePopup();
+                    alert("Delete failed: " + err);
+                });
+        }
+
+        function openManualUser() {
+            const uid = document.getElementById('manualUserId').value.trim();
+            if (!uid) return;
+            
+            fetch('/api/buyers?_t=' + Date.now(), { cache: 'no-store' })
+                .then(r => r.json())
+                .then(buyers => {
+                    const isBuyer = buyers.hasOwnProperty(uid);
+                    window.location.href = isBuyer ? '/user/' + uid : '/new_buyer/' + uid;
+                }).catch(() => {
+                    window.location.href = '/new_buyer/' + uid;
+                });
+        }
+
+        function loadGroups() {
+            fetch('/api/groups?_t=' + Date.now(), { cache: 'no-store' })
+                .then(r => r.json())
+                .then(groups => {
+                    const entries = Object.entries(groups);
+                    document.getElementById('groupsCount').textContent = entries.length + ' Groups';
+                    const container = document.getElementById('groupsTable');
+                    container.innerHTML = '';
+                    
+                    entries.forEach(([cid, data]) => {
+                        let buyersHtml = '';
+                        data.buyers.forEach(b => {
+                            const bName = (!b.name || b.name === 'Unknown') ? 'Unknown' : b.name;
+                            const bUname = b.username ? ` @${b.username}` : '';
+                            const titleColor = bName === 'Unknown' ? 'color: #999;' : 'color: #1c1e21;';
+                            const subColor = bName === 'Unknown' ? 'color: #bbb;' : 'color: #666;';
+                            let borderColor = '#4CAF50';
+                            let cardBg = 'linear-gradient(to right, #e4f3e5, #ffffff)';
+                            if (b.is_buyer === false) {
+                                borderColor = '#ffffff';
+                                cardBg = '#ffffff';
+                            } else if (b.is_expired) {
+                                borderColor = '#f44336';
+                                cardBg = 'linear-gradient(to right, #fde3e1, #ffffff)';
+                            }
+                            
+                            buyersHtml += `
+                                <div class="list-card" style="margin: 0; padding: 10px; box-shadow: inset 4px 0 0 0 ${borderColor}; cursor: pointer; background: ${cardBg}; border-radius: 0; border: none; border-bottom: 1px solid #eee;" onclick="window.location.href='/user/${b.user_id}'">
+                                    <div style="display: flex; align-items: center; gap: 10px; flex: 1; overflow: hidden; margin-left: 5px;">
+                                    ${b.avatar_v > 0 
+                                        ? `<img src="/api/avatars/${b.user_id}?_t=${b.avatar_v}" style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                                           <div style="display: none; width: 32px; height: 32px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0;">
+                                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-round-icon lucide-user-round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                                           </div>`
+                                        : `<div style="display: flex; width: 32px; height: 32px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0;">
+                                               <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-round-icon lucide-user-round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                                           </div>`
+                                    }
+                                        <div style="flex: 1; overflow: hidden;">
+                                            <div style="font-weight: 600; font-size: 14px; ${titleColor}">${bName}</div>
+                                            <div style="font-size: 12px; ${subColor}">${b.user_id}${bUname}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+
+                        const gName = data.title || 'Unknown Group';
+                        const gUname = data.username ? ` @${data.username}` : '';
+                        
+                        container.innerHTML += `
+                            <div style="background: #ffffff; border-radius: 10px; border: 1px solid #e0e0e0; padding-top: 10px; display: block; cursor: default; overflow: hidden;">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                ${data.avatar_v > 0 
+                                    ? `<img src="/api/avatars/${cid}?_t=${data.avatar_v}" style="width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; margin-left: 10px;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                                       <div style="display: none; width: 40px; height: 40px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0; margin-left: 10px;">
+                                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-users-round-icon lucide-users-round"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/></svg>
+                                       </div>`
+                                    : `<div style="display: flex; width: 40px; height: 40px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0; margin-left: 10px;">
+                                           <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-users-round-icon lucide-users-round"><path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/></svg>
+                                       </div>`
+                                }
+                                    <div style="flex: 1; overflow: hidden;">
+                                        <div class="list-title" style="color: #1c1e21;">${gName}</div>
+                                        <div class="list-subtitle" style="color: #666;">${cid}${gUname}</div>
+                                    </div>
+                                </div>
+                                <div style="margin-top: 10px; border-top: 1px solid #e0e0e0; display: flex; flex-direction: column;">
+                                    ${buyersHtml}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }).finally(() => { checkGlobalLoad(); });
+        }
+
+        loadBuyers();
+        loadUsers();
+        loadGroups();
+    </script>
+</body>
+
+</html>
