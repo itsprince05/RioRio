@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RioRio Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Outfit', sans-serif; background-color: #f0f2f5; margin: 0; padding: 0; color: #1c1e21; -webkit-user-select: none; user-select: none; }
+        * { -webkit-tap-highlight-color: transparent; }
+        .action-bar { position: sticky; top: 0; z-index: 100; box-sizing: border-box; height: 48px; background: #2481cc; color: white; padding: 0 10px; gap: 10px; display: flex; align-items: center; }
+        .navbar-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: transparent; color: white; cursor: pointer; }
+        .navbar-title { font-size: 18px; font-weight: 600; letter-spacing: 0.5px; }
+        .container { max-width: 800px; margin: 0 auto; padding: 10px; padding-bottom: 80px; }
+        .card { background: #ffffff; border-radius: 10px; padding: 10px; border: 1px solid #e0e0e0; box-sizing: border-box; }
+        .card h3 { margin-top: 0; font-size: 16px; color: #1c1e21; margin-bottom: 5px; }
+        input[type="text"], textarea { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0; box-sizing: border-box; font-family: inherit; font-size: 15px; }
+        .primary-btn { width: 100%; padding: 12px; background: #2481cc; color: white; border: none; border-radius: 10px; font-weight: 600; font-size: 15px; cursor: pointer; }
+        .primary-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+        .checkbox { display: none; }
+        .custom-checkbox { width: 24px; height: 24px; cursor: pointer; color: #2481cc; flex-shrink: 0; }
+        .custom-checkbox .checked-icon { display: none; }
+        .custom-checkbox .unchecked-icon { display: block; color: #999; }
+        input[type="checkbox"]:checked ~ .custom-checkbox .checked-icon, input[type="radio"]:checked ~ .custom-checkbox .checked-icon { display: block; }
+        input[type="checkbox"]:checked ~ .custom-checkbox .unchecked-icon, input[type="radio"]:checked ~ .custom-checkbox .unchecked-icon { display: none; }
+        
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+            -webkit-appearance: none; 
+            margin: 0; 
+        }
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body>
+    <div class="action-bar">
+        <div class="navbar-icon" onclick="window.location.href='/'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-arrow-left-icon lucide-arrow-left"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg>
+        </div>
+        <div class="navbar-title">Allow New Buyer</div>
+    </div>
+    
+    <div class="container">
+        <!-- Settings Block -->
+        <div class="card" style="margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #e0e0e0;">
+                <img src="/api/avatars/{{ userid }}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; flex-shrink: 0;" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                <div style="display: none; width: 60px; height: 60px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-user-round-icon lucide-user-round"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                </div>
+                <div style="flex: 1; overflow: hidden;">
+                    <div style="font-weight: 700; font-size: 18px; color: #1c1e21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{{ real_name }}</div>
+                    <div style="font-size: 14px; color: #666; margin-top: 4px;">{{ userid }}</div>
+                    <div style="font-size: 14px; color: #666; margin-top: 2px;">{% if username %}@{{ username }}{% else %}(no username){% endif %}</div>
+                </div>
+            </div>
+
+            <h3 style="margin-bottom: 10px;">Nick Name</h3>
+            <input type="text" id="userNameInput" value="{{ name }}" placeholder="{{ real_name }}" style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0; box-sizing: border-box; margin-bottom: 10px; font-family: inherit; font-size: 15px;">
+            
+            <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                    <input type="checkbox" id="cb_set_cover" class="checkbox" {% if set_cover %}checked{% endif %}>
+                    <div class="custom-checkbox">
+                        <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                        <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+                    </div>
+                </label>
+                <label for="cb_set_cover" style="font-size: 15px; font-weight: 500; cursor: pointer;">Set audio cover in episode</label>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                    <input type="checkbox" id="cb_set_artist" class="checkbox" {% if set_artist %}checked{% endif %}>
+                    <div class="custom-checkbox">
+                        <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                        <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+                    </div>
+                </label>
+                <label for="cb_set_artist" style="font-size: 15px; font-weight: 500; cursor: pointer;">Set artist name in episode</label>
+            </div>
+        </div>
+
+        <!-- Allowed Block -->
+        <div class="card" style="margin-bottom: 10px;">
+            <h3 style="margin-bottom: 10px;">Language Access</h3>
+            
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+                <!-- All Stories and Extra Episode -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                            <input type="checkbox" id="cb_all_stories" class="checkbox" {% if has_all %}checked{% endif %}>
+                            <div class="custom-checkbox">
+                                <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                                <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+                            </div>
+                        </label>
+                        <label for="cb_all_stories" style="font-size: 15px; font-weight: 600; cursor: pointer;">All Stories</label>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                            <input type="checkbox" id="cb_extra_episode" class="checkbox" {% if extra_episode %}checked{% endif %}>
+                            <div class="custom-checkbox">
+                                <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                                <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+                            </div>
+                        </label>
+                        <label for="cb_extra_episode" style="font-size: 15px; font-weight: 600; cursor: pointer;">Extra Episode</label>
+                    </div>
+                </div>
+                
+                <div style="border-top: 1px solid #eee; margin: 5px 0;"></div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                    <!-- First Cell: Custom Story -->
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                            <input type="checkbox" id="cb_custom_story" class="checkbox">
+                            <div class="custom-checkbox">
+                                <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                                <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+                            </div>
+                        </label>
+                        <label for="cb_custom_story" style="font-size: 15px; font-weight: 600; cursor: pointer;">Custom Story</label>
+                    </div>
+
+                    {% set all_langs = ["Hindi", "English", "Tamil", "Telugu", "Kannada", "Bengali", "Malayalam", "French", "Spanish", "German", "Portuguese"] %}
+                    {% for lang in all_langs %}
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                                <input type="checkbox" id="cb_lang_{{ lang }}" class="checkbox lang-checkbox" value="{{ lang }}" {% if lang in allowed_langs %}checked{% endif %}>
+                                <div class="custom-checkbox">
+                                    <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                                    <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+                                </div>
+                            </label>
+                            <label for="cb_lang_{{ lang }}" style="font-size: 15px; font-weight: 500; cursor: pointer;">{{ lang }}</label>
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div style="border-top: 1px solid #eee; margin: 10px 0;"></div>
+            
+            <h3 style="margin-bottom: 5px;">Validity</h3>
+            <div id="validityLabel" style="font-size: 14px; font-weight: 500; margin-bottom: 15px; color: {{ expiry_color }};">{{ expiry_text }}</div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                {% set durations = [
+                    ("1 Hour", "1 Day"),
+                    ("1 Week", "1 Month"),
+                    ("1 Year", "Lifetime")
+                ] %}
+                
+                {% for d1, d2 in durations %}
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                            <input type="radio" name="durationRadio" value="{{ d1 }}" class="checkbox" onclick="document.getElementById('customDaysInput').value = '';">
+                            <div class="custom-checkbox" style="border-radius: 50%; overflow: hidden;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="unchecked-icon"><circle cx="12" cy="12" r="10"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="checked-icon"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+                            </div>
+                        </label>
+                        <label style="font-size: 15px; font-weight: 500; cursor: pointer;" onclick="this.previousElementSibling.querySelector('input').click()">{{ d1 }}</label>
+                    </div>
+                    
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                            <input type="radio" name="durationRadio" value="{{ d2 }}" class="checkbox" onclick="document.getElementById('customDaysInput').value = '';">
+                            <div class="custom-checkbox" style="border-radius: 50%; overflow: hidden;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="unchecked-icon"><circle cx="12" cy="12" r="10"/></svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="checked-icon"><path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/></svg>
+                            </div>
+                        </label>
+                        <label style="font-size: 15px; font-weight: 500; cursor: pointer;" onclick="this.previousElementSibling.querySelector('input').click()">{{ d2 }}</label>
+                    </div>
+                {% endfor %}
+            </div>
+            
+            <div style="margin-top: 15px;">
+                <label style="font-size: 14px; font-weight: 500; display: block; margin-bottom: 5px;">Or enter custom days...</label>
+                <input type="number" id="customDaysInput" placeholder="Enter number of days" min="1" 
+                       style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 14px; outline: none; transition: border-color 0.2s;"
+                       onfocus="this.style.borderColor='#2481cc'; document.querySelectorAll('input[name=\'durationRadio\']').forEach(r => r.checked = false);"
+                       onblur="this.style.borderColor='#ddd';">
+            </div>
+        </div>
+    </div>
+
+    <div id="bottomBar" style="position: fixed; bottom: 0; left: 0; width: 100%; background: #ffffff; border-top: 1px solid #e0e0e0; padding: 10px; box-sizing: border-box; display: flex; justify-content: center; z-index: 1000;">
+        <div style="width: 100%; max-width: 800px;">
+            <button id="updateBtn" class="primary-btn" onclick="updateAll()" disabled style="opacity: 0.5; cursor: not-allowed;">Allow</button>
+        </div>
+    </div>
+
+    <script>
+        function updateAll() {
+            const btn = document.getElementById('updateBtn');
+            btn.disabled = true;
+            btn.innerHTML = 'Allowing';
+            
+            const checkboxes = document.querySelectorAll('.lang-checkbox');
+            let newLangs = [];
+            checkboxes.forEach(cb => {
+                if (cb.checked) newLangs.push(cb.value);
+            });
+            const hasAll = document.getElementById('cb_all_stories').checked;
+            const extraEpisode = document.getElementById('cb_extra_episode').checked;
+            const customStory = document.getElementById('cb_custom_story').checked;
+            
+            const userName = document.getElementById('userNameInput').value;
+            const durationEl = document.querySelector('input[name="durationRadio"]:checked');
+            const customDays = document.getElementById('customDaysInput').value;
+            let duration = durationEl ? durationEl.value : "";
+            if (customDays && customDays.trim() !== '') {
+                duration = customDays.trim() + " Days";
+            }
+            const setCover = document.getElementById('cb_set_cover').checked;
+            const setArtist = document.getElementById('cb_set_artist').checked;
+
+            fetch('/api/buyers/{{ userid }}/update_all', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    langs: newLangs,
+                    has_all: hasAll,
+                    extra_episode: extraEpisode,
+                    custom_story: customStory,
+                    name: userName,
+                    duration: duration,
+                    set_cover: setCover,
+                    set_artist: setArtist
+                })
+            }).then(r => r.json()).then(res => {
+                btn.disabled = false;
+                if(res.success) {
+                    btn.innerHTML = 'Allowed';
+                    btn.style.backgroundColor = '#2b8a3e';
+                    
+                    if (res.expiry_text) {
+                        const lbl = document.getElementById('validityLabel');
+                        lbl.textContent = res.expiry_text;
+                        lbl.style.color = res.expiry_color;
+                        if (durationEl) durationEl.checked = false;
+                    }
+                    
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 500);
+                } else {
+                    btn.innerHTML = 'Allow';
+                    alert('Failed to update allowed shows');
+                }
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = 'Allow';
+                alert('Error updating shows');
+            });
+        }
+        
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('cb_custom_story').checked = true;
+
+            function checkAllowState() {
+                const hasStory = Array.from(document.querySelectorAll('.lang-checkbox, #cb_all_stories, #cb_extra_episode, #cb_custom_story')).some(cb => cb.checked);
+                const hasValidity = document.querySelector('input[name="durationRadio"]:checked') !== null || document.getElementById('customDaysInput').value.trim() !== '';
+                
+                const btn = document.getElementById('updateBtn');
+                if (hasStory && hasValidity) {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                } else {
+                    btn.disabled = true;
+                    btn.style.opacity = '0.5';
+                    btn.style.cursor = 'not-allowed';
+                }
+            }
+
+            document.querySelectorAll('input').forEach(el => {
+                el.addEventListener('change', checkAllowState);
+                el.addEventListener('input', checkAllowState);
+            });
+
+            checkAllowState();
+
+            document.addEventListener("keydown", function(e) {
+                if (e.target.type === "number" && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+                    e.preventDefault();
+                }
+            });
+
+            const allCb = document.getElementById('cb_all_stories');
+            const customStoryCb = document.getElementById('cb_custom_story');
+            const langCbs = document.querySelectorAll('.lang-checkbox');
+
+            allCb.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    langCbs.forEach(cb => cb.checked = true);
+                    customStoryCb.checked = false;
+                } else {
+                    langCbs.forEach(cb => cb.checked = false);
+                }
+                checkAllowState();
+            });
+
+            customStoryCb.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    langCbs.forEach(cb => cb.checked = false);
+                    allCb.checked = false;
+                }
+                checkAllowState();
+            });
+
+            langCbs.forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        customStoryCb.checked = false;
+                    }
+                    if (!e.target.checked) {
+                        allCb.checked = false;
+                    } else {
+                        const allChecked = Array.from(langCbs).every(c => c.checked);
+                        if (allChecked) allCb.checked = true;
+                    }
+                    checkAllowState();
+                });
+            });
+        });
+    </script>
+</body>
+</html>
