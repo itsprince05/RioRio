@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RioRio Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #f0f2f5;
+            margin: 0;
+            padding: 0;
+            color: #1c1e21;
+            -webkit-user-select: none;
+            user-select: none;
+        }
+
+        * {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .action-bar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-sizing: border-box;
+            height: 48px;
+            background: #2481cc;
+            color: white;
+            padding: 0 10px;
+            gap: 10px;
+            display: flex;
+            align-items: center;
+        }
+
+        .navbar-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: transparent;
+            color: white;
+            cursor: pointer;
+        }
+
+        .navbar-title {
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        .tabs-container {
+            display: flex;
+            background: #fff;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .tab {
+            flex: 1;
+            text-align: center;
+            padding: 12px 0;
+            font-weight: 600;
+            color: #666;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: 0.2s;
+        }
+
+        .tab.active {
+            color: #2481cc;
+            background: #eef5fb;
+            border-bottom: 2px solid #2481cc;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 10px;
+            padding-bottom: 80px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .card {
+            background: #ffffff;
+            border-radius: 10px;
+            padding: 10px;
+            border: 1px solid #e0e0e0;
+            box-sizing: border-box;
+        }
+
+        .card h3 {
+            margin-top: 0;
+            font-size: 16px;
+            color: #1c1e21;
+            margin-bottom: 5px;
+        }
+
+        .item-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            background: #ffffff;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #e0e0e0;
+        }
+
+        .list-card {
+            background: transparent;
+            border-radius: 0;
+            padding: 10px;
+            border: none;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .list-card:last-child {
+            border-bottom: none;
+        }
+
+        .list-title {
+            font-weight: 600;
+            font-size: 15px;
+            color: #1c1e21;
+        }
+
+        input[type="text"],
+        textarea {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #e0e0e0;
+            box-sizing: border-box;
+            font-family: inherit;
+            font-size: 15px;
+        }
+
+        .primary-btn {
+            width: 100%;
+            padding: 12px;
+            background: #2481cc;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .primary-btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        .spin {
+            animation: spin 1s linear infinite;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .checkbox {
+            display: none;
+        }
+
+        .custom-checkbox {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            color: #2481cc;
+            flex-shrink: 0;
+        }
+
+        .custom-checkbox .checked-icon {
+            display: none;
+        }
+
+        .custom-checkbox .unchecked-icon {
+            display: block;
+            color: #999;
+        }
+
+        input[type="checkbox"]:checked~.custom-checkbox .checked-icon,
+        input[type="radio"]:checked~.custom-checkbox .checked-icon {
+            display: block;
+        }
+
+        input[type="checkbox"]:checked~.custom-checkbox .unchecked-icon,
+        input[type="radio"]:checked~.custom-checkbox .unchecked-icon {
+            display: none;
+        }
+
+        input[type=number]::-webkit-inner-spin-button,
+        input[type=number]::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type=number] {
+            -moz-appearance: textfield;
+        }
+
+        #delete-popup {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .popup-box {
+            background: #fff;
+            padding: 20px;
+            border-radius: 12px;
+            width: calc(100% - 40px);
+            max-width: 320px;
+            box-sizing: border-box;
+        }
+
+        .popup-box h3 {
+            margin-top: 0;
+            color: #1c1e21;
+            margin-bottom: 20px;
+        }
+
+        .popup-box p {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+        }
+
+        .popup-btns {
+            display: flex;
+            gap: 20px;
+        }
+
+        .popup-btns button {
+            flex: 1;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 15px;
+        }
+
+        .cancel-btn {
+            background: #f0f2f5;
+            color: #333;
+        }
+
+        .confirm-btn {
+            background: #fa5252;
+            color: #fff;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="action-bar">
+        <div class="navbar-icon" onclick="window.location.href='/'">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                class="lucide lucide-arrow-left-icon lucide-arrow-left">
+                <path d="m12 19-7-7 7-7" />
+                <path d="M19 12H5" />
+            </svg>
+        </div>
+        <div class="navbar-title">RioRio Dashboard</div>
+    </div>
+
+    <div class="tabs-container">
+        <!-- Add tab removed -->
+        <div class="tab active" onclick="switchTab('allowed-shows-tab', event)">Allowed</div>
+        <div class="tab" onclick="switchTab('saved-shows-tab', event)">Saved</div>
+        <div class="tab" onclick="switchTab('custom-shows-tab', event)">Custom</div>
+        <div class="tab" onclick="switchTab('settings-tab', event)">Setting</div>
+    </div>
+
+    <div class="container">
+        <!-- Add Show content removed -->
+        <div id="allowed-shows-tab" class="tab-content active">
+            <div class="card" style="margin-bottom: 10px;">
+                <h3 style="margin-bottom: 10px;">Language Access</h3>
+
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <!-- All Stories and Extra Episode -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                                <input type="checkbox" id="cb_all_stories" class="checkbox" {% if has_all %}checked{%
+                                    endif %}>
+                                <div class="custom-checkbox">
+                                    <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24"
+                                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="18" height="18" x="3" y="3" rx="2" />
+                                    </svg>
+                                    <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+                                        <path d="m9 11 3 3L22 4" />
+                                    </svg>
+                                </div>
+                            </label>
+                            <label for="cb_all_stories" style="font-size: 15px; font-weight: 600; cursor: pointer;">All
+                                Stories</label>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                                <input type="checkbox" id="cb_extra_episode" class="checkbox" {% if extra_episode
+                                    %}checked{% endif %}>
+                                <div class="custom-checkbox">
+                                    <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24"
+                                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="18" height="18" x="3" y="3" rx="2" />
+                                    </svg>
+                                    <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+                                        <path d="m9 11 3 3L22 4" />
+                                    </svg>
+                                </div>
+                            </label>
+                            <label for="cb_extra_episode"
+                                style="font-size: 15px; font-weight: 600; cursor: pointer;">Extra Episode</label>
+                        </div>
+                    </div>
+
+                    <div style="border-top: 1px solid #eee; margin: 5px 0;"></div>
+
+                    <!-- Language Grid -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+                        <!-- First Cell: Custom Story -->
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                                <input type="checkbox" id="cb_custom_story" class="checkbox" {% if custom_story %}checked{% endif %}>
+                                <div class="custom-checkbox">
+                                    <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24"
+                                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="18" height="18" x="3" y="3" rx="2" />
+                                    </svg>
+                                    <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+                                        <path d="m9 11 3 3L22 4" />
+                                    </svg>
+                                </div>
+                            </label>
+                            <label for="cb_custom_story"
+                                style="font-size: 15px; font-weight: 600; cursor: pointer;">Custom Story</label>
+                        </div>
+
+                        {% set all_langs = ["Hindi", "English", "Tamil", "Telugu", "Kannada", "Bengali", "Malayalam",
+                        "French", "Spanish", "German", "Portuguese"] %}
+                        {% for lang in all_langs %}
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                                <input type="checkbox" id="cb_lang_{{ lang }}" class="checkbox lang-checkbox"
+                                    value="{{ lang }}" {% if lang in allowed_langs %}checked{% endif %}>
+                                <div class="custom-checkbox">
+                                    <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24"
+                                        height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect width="18" height="18" x="3" y="3" rx="2" />
+                                    </svg>
+                                    <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                        viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                        stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+                                        <path d="m9 11 3 3L22 4" />
+                                    </svg>
+                                </div>
+                            </label>
+                            <label for="cb_lang_{{ lang }}"
+                                style="font-size: 15px; font-weight: 500; cursor: pointer;">{{ lang }}</label>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="saved-shows-tab" class="tab-content">
+            <div style="font-size: 13px; color: #666; font-weight: 600; padding: 0 0 10px 0;">{{ saved_shows|length }}
+                Saved Shows</div>
+            <div class="item-list">
+                {% if saved_shows|length == 0 %}
+                <div style="padding:10px;text-align:center;color:#666;">0 saved shows</div>
+                {% else %}
+                {% for show in saved_shows %}
+                <div class="list-card">
+                    <div style="flex: 1; overflow: hidden;">
+                        <div class="list-title">{{ show.title }}</div>
+                    </div>
+                    <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                        <input type="checkbox" class="checkbox saved-show-checkbox" value="{{ show.id }}" checked>
+                        <div class="custom-checkbox">
+                            <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="18" height="18" x="3" y="3" rx="2" />
+                            </svg>
+                            <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+                                <path d="m9 11 3 3L22 4" />
+                            </svg>
+                        </div>
+                    </label>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="custom-shows-tab" class="tab-content">
+            <div class="card" style="margin-bottom: 10px;">
+                <h3 style="margin-bottom: 10px;">Custom Rules...</h3>
+
+                <div style="margin-bottom: 10px;">
+                    <input type="text" id="customStoryName" readonly placeholder="Story Name"
+                        style="background: #f5f5f5; color: #333; cursor: not-allowed; width: 100%; height: 44px; padding: 10px 12px; border-radius: 8px; border: 1px solid #e0e0e0; box-sizing: border-box; font-family: inherit; font-size: 15px;">
+                    <pre id="customStoryError"
+                        style="color: #fa5252; font-size: 12px; margin-top: 5px; display: none; white-space: pre-wrap; word-wrap: break-word; background: #fff1f0; padding: 10px; border-radius: 5px; border: 1px solid #ffccc7;"></pre>
+                </div>
+
+                <div style="margin-bottom: 10px; position: relative;">
+                    <input type="text" id="customStoryUrl" placeholder="Enter story URL"
+                        style="width: 100%; height: 44px; padding: 10px 40px 10px 12px; border-radius: 8px; border: 1px solid #e0e0e0; box-sizing: border-box; font-family: inherit; font-size: 15px;"
+                        oninput="fetchCustomShowInfo(this.value)">
+                    <div id="customShowLoader" class="spin"
+                        style="display: none; position: absolute; right: 12px; top: 12px; width: 20px; height: 20px; color: #2481cc;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 2v4" />
+                            <path d="m16.2 7.8 2.9-2.9" />
+                            <path d="M18 12h4" />
+                            <path d="m16.2 16.2 2.9 2.9" />
+                            <path d="M12 18v4" />
+                            <path d="m4.9 19.1 2.9-2.9" />
+                            <path d="M2 12h4" />
+                            <path d="m4.9 4.9 2.9 2.9" />
+                        </svg>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-bottom: 0;">
+                    <button id="btnAllowCustom" class="primary-btn"
+                        style="flex: 3; height: 44px; background: #2b8a3e; margin: 0; display: flex; align-items: center; justify-content: center;"
+                        onclick="addCustomShow('allow')" disabled>Always Allow</button>
+                    <button id="btnBlockCustom" class="primary-btn"
+                        style="flex: 2; height: 44px; background: #fa5252; margin: 0; display: flex; align-items: center; justify-content: center;"
+                        onclick="addCustomShow('block')" disabled>Block</button>
+                </div>
+            </div>
+
+            <div id="custom-shows-list" class="item-list" style="margin-bottom: 20px;">
+                <!-- Custom rules will be loaded here via JS -->
+            </div>
+        </div>
+
+        <div id="settings-tab" class="tab-content">
+            <div class="card" style="margin-bottom: 10px;">
+                <!-- User Profile -->
+                <div
+                    style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #e0e0e0;">
+                    <img src="/api/avatars/{{ userid }}"
+                        style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; flex-shrink: 0;"
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                    <div
+                        style="display: none; width: 60px; height: 60px; border-radius: 50%; background: #eef5fb; color: #2481cc; align-items: center; justify-content: center; flex-shrink: 0;">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            class="lucide lucide-user-round-icon lucide-user-round">
+                            <circle cx="12" cy="8" r="5" />
+                            <path d="M20 21a8 8 0 0 0-16 0" />
+                        </svg>
+                    </div>
+                    <div style="flex: 1; overflow: hidden;">
+                        <div
+                            style="font-weight: 700; font-size: 18px; color: #1c1e21; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            {{ real_name }}</div>
+                        <div style="font-size: 14px; color: #666; margin-top: 4px;">{{ userid }}</div>
+                        <div style="font-size: 14px; color: #666; margin-top: 2px;">{% if username %}@{{ username }}{%
+                            else %}(no username){% endif %}</div>
+                    </div>
+                </div>
+
+                <h3 style="margin-bottom: 10px;">Nick Name</h3>
+                <input type="text" id="userNameInput" value="{{ name }}" placeholder="{{ real_name }}"
+                    style="width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #e0e0e0; box-sizing: border-box; margin-bottom: 10px; font-family: inherit; font-size: 15px;">
+
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                    <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                        <input type="checkbox" id="cb_set_cover" class="checkbox" {% if set_cover %}checked{% endif %}>
+                        <div class="custom-checkbox">
+                            <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="18" height="18" x="3" y="3" rx="2" />
+                            </svg>
+                            <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+                                <path d="m9 11 3 3L22 4" />
+                            </svg>
+                        </div>
+                    </label>
+                    <label for="cb_set_cover" style="font-size: 15px; font-weight: 500; cursor: pointer;">Set audio
+                        cover in episode</label>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                        <input type="checkbox" id="cb_set_artist" class="checkbox" {% if set_artist %}checked{% endif
+                            %}>
+                        <div class="custom-checkbox">
+                            <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <rect width="18" height="18" x="3" y="3" rx="2" />
+                            </svg>
+                            <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24"
+                                viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344" />
+                                <path d="m9 11 3 3L22 4" />
+                            </svg>
+                        </div>
+                    </label>
+                    <label for="cb_set_artist" style="font-size: 15px; font-weight: 500; cursor: pointer;">Set artist
+                        name in episode</label>
+                </div>
+
+                <div style="border-top: 1px solid #eee; margin: 10px 0;"></div>
+
+                <h3 style="margin-bottom: 5px;">Validity</h3>
+                <div id="validityLabel"
+                    style="font-size: 14px; font-weight: 500; margin-bottom: 15px; color: {{ expiry_color }};">{{
+                    expiry_text }}</div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px;">
+                    {% set durations = [
+                    ("1 Hour", "1 Day"),
+                    ("1 Week", "1 Month"),
+                    ("1 Year", "Lifetime")
+                    ] %}
+
+                    {% for d1, d2 in durations %}
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                            <input type="radio" name="durationRadio" value="{{ d1 }}" class="checkbox"
+                                onclick="document.getElementById('customDaysInput').value = '';">
+                            <div class="custom-checkbox" style="border-radius: 50%; overflow: hidden;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="unchecked-icon">
+                                    <circle cx="12" cy="12" r="10" />
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="checked-icon">
+                                    <path d="M21.801 10A10 10 0 1 1 17 3.335" />
+                                    <path d="m9 11 3 3L22 4" />
+                                </svg>
+                            </div>
+                        </label>
+                        <label style="font-size: 15px; font-weight: 500; cursor: pointer;"
+                            onclick="this.previousElementSibling.querySelector('input').click()">{{ d1 }}</label>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 10px;">
+                        <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                            <input type="radio" name="durationRadio" value="{{ d2 }}" class="checkbox"
+                                onclick="document.getElementById('customDaysInput').value = '';">
+                            <div class="custom-checkbox" style="border-radius: 50%; overflow: hidden;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="unchecked-icon">
+                                    <circle cx="12" cy="12" r="10" />
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="checked-icon">
+                                    <path d="M21.801 10A10 10 0 1 1 17 3.335" />
+                                    <path d="m9 11 3 3L22 4" />
+                                </svg>
+                            </div>
+                        </label>
+                        <label style="font-size: 15px; font-weight: 500; cursor: pointer;"
+                            onclick="this.previousElementSibling.querySelector('input').click()">{{ d2 }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div style="margin-top: 15px;">
+                    <label style="font-size: 14px; font-weight: 500; display: block; margin-bottom: 5px;">Or enter
+                        custom days...</label>
+                    <input type="number" id="customDaysInput" placeholder="Enter number of days" min="1"
+                        style="width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; box-sizing: border-box; font-size: 14px; outline: none; transition: border-color 0.2s;"
+                        onfocus="this.style.borderColor='#2481cc'; document.querySelectorAll('input[name=\'durationRadio\']').forEach(r => r.checked = false);"
+                        onblur="this.style.borderColor='#ddd';">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="bottomBar"
+        style="position: fixed; bottom: 0; left: 0; width: 100%; background: #ffffff; border-top: 1px solid #e0e0e0; padding: 10px; box-sizing: border-box; display: flex; justify-content: center; z-index: 1000;">
+        <div style="width: 100%; max-width: 800px;">
+            <button id="updateBtn" class="primary-btn" onclick="updateAll()" disabled
+                style="opacity: 0.5; cursor: not-allowed;">Update</button>
+        </div>
+    </div>
+
+    <script>
+        function loadSavedShows() {
+            fetch('/api/buyers/{{ userid }}/saved_shows')
+                .then(r => r.json())
+                .then(shows => {
+                    const list = document.querySelector('#saved-shows-tab .item-list');
+                    const header = document.querySelector('#saved-shows-tab > div:first-child');
+                    header.textContent = shows.length + " Saved Shows";
+                    if (shows.length === 0) {
+                        list.innerHTML = '<div style="padding:10px;text-align:center;color:#666;">0 saved shows</div>';
+                    } else {
+                        let html = '';
+                        shows.forEach(show => {
+                            html += `
+                            <div class="list-card">
+                                <div style="flex: 1; overflow: hidden;">
+                                    <div class="list-title">${show.title}</div>
+                                </div>
+                                <label style="cursor: pointer; display: flex; align-items: center; margin: 0;">
+                                    <input type="checkbox" class="checkbox saved-show-checkbox" value="${show.id}" checked>
+                                    <div class="custom-checkbox">
+                                        <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                                        <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+                                    </div>
+                                </label>
+                            </div>`;
+                        });
+                        list.innerHTML = html;
+                        document.querySelectorAll('.saved-show-checkbox').forEach(cb => {
+                            cb.addEventListener('change', checkChanges);
+                        });
+                    }
+                    initialState.savedShows = shows.map(s => String(s.id));
+                    checkChanges();
+                });
+        }
+
+        let customShowFetchTimeout = null;
+        let currentCustomShowId = null;
+
+        function fetchCustomShowInfo(url) {
+            clearTimeout(customShowFetchTimeout);
+            const loader = document.getElementById('customShowLoader');
+            const nameInput = document.getElementById('customStoryName');
+            const errorLabel = document.getElementById('customStoryError');
+            const btnAllow = document.getElementById('btnAllowCustom');
+            const btnBlock = document.getElementById('btnBlockCustom');
+
+            if (!url || url.trim() === '') {
+                loader.style.display = 'none';
+                nameInput.value = '';
+                errorLabel.style.display = 'none';
+                btnAllow.disabled = true;
+                btnBlock.disabled = true;
+                currentCustomShowId = null;
+                return;
+            }
+
+            loader.style.display = 'block';
+            nameInput.value = '';
+            errorLabel.style.display = 'none';
+            btnAllow.disabled = true;
+            btnBlock.disabled = true;
+            currentCustomShowId = null;
+
+            customShowFetchTimeout = setTimeout(() => {
+                fetch('/api/custom_show_info?url=' + encodeURIComponent(url.trim()))
+                    .then(r => r.json())
+                    .then(res => {
+                        loader.style.display = 'none';
+                        if (res.success && res.title) {
+                            nameInput.value = res.title;
+                            currentCustomShowId = res.show_id;
+                            btnAllow.disabled = false;
+                            btnBlock.disabled = false;
+                            errorLabel.style.display = 'none';
+                        } else {
+                            nameInput.value = 'Show not found';
+                            if (res.raw_response) {
+                                errorLabel.textContent = "RAW RESPONSE:\n" + JSON.stringify(res.raw_response, null, 2);
+                            } else {
+                                errorLabel.textContent = res.error || 'Unknown error';
+                            }
+                            errorLabel.style.display = 'block';
+                        }
+                    }).catch(err => {
+                        loader.style.display = 'none';
+                        nameInput.value = 'Error fetching details';
+                        errorLabel.textContent = err.toString();
+                        errorLabel.style.display = 'block';
+                    });
+            }, 800);
+        }
+
+        function addCustomShow(action) {
+            if (!currentCustomShowId) return;
+            const btnAllow = document.getElementById('btnAllowCustom');
+            const btnBlock = document.getElementById('btnBlockCustom');
+            btnAllow.disabled = true;
+            btnBlock.disabled = true;
+
+            fetch('/api/buyers/{{ userid }}/custom_rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ show_id: currentCustomShowId, action: action })
+            }).then(r => r.json()).then(res => {
+                if (res.success) {
+                    document.getElementById('customStoryUrl').value = '';
+                    fetchCustomShowInfo('');
+                    loadCustomShows();
+                } else {
+                    alert('Failed to add rule');
+                    btnAllow.disabled = false;
+                    btnBlock.disabled = false;
+                }
+            });
+        }
+
+        let itemToDeleteId = null;
+        let deleteTimer = null;
+
+        function showDeletePopup(showId, title) {
+            itemToDeleteId = showId;
+            document.getElementById('delete-popup').style.display = 'flex';
+
+            const popupDesc = document.querySelector('#delete-popup p');
+            popupDesc.innerHTML = `Are you sure you want to delete...<br><span style="font-weight: 600; color: #1c1e21;">${title}</span>`;
+
+            const btn = document.getElementById('delete-btn-submit');
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            btn.style.cursor = 'not-allowed';
+            let count = 5;
+            btn.textContent = `Delete (${count})`;
+            if (deleteTimer) clearInterval(deleteTimer);
+            deleteTimer = setInterval(() => {
+                count--;
+                if (count > 0) {
+                    btn.textContent = `Delete (${count})`;
+                } else {
+                    clearInterval(deleteTimer);
+                    btn.textContent = 'Delete';
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.cursor = 'pointer';
+                }
+            }, 1000);
+        }
+
+        function hideDeletePopup() {
+            document.getElementById('delete-popup').style.display = 'none';
+            itemToDeleteId = null;
+            if (deleteTimer) clearInterval(deleteTimer);
+        }
+
+        function confirmDeleteRule() {
+            if (!itemToDeleteId) return;
+            fetch('/api/buyers/{{ userid }}/custom_rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ show_id: itemToDeleteId, action: 'remove' })
+            }).then(r => r.json()).then(res => {
+                hideDeletePopup();
+                if (res.success) loadCustomShows();
+            });
+        }
+
+        function toggleCustomRule(showId, newAction, btnElement) {
+            // Show loader
+            const loaderSvg = `<svg class="spin" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="m16.2 7.8 2.9-2.9"/><path d="M18 12h4"/><path d="m16.2 16.2 2.9 2.9"/><path d="M12 18v4"/><path d="m4.9 19.1 2.9-2.9"/><path d="M2 12h4"/><path d="m4.9 4.9 2.9 2.9"/></svg>`;
+            if (btnElement) {
+                btnElement.innerHTML = loaderSvg;
+                btnElement.style.pointerEvents = 'none';
+            }
+
+            fetch('/api/buyers/{{ userid }}/custom_rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ show_id: showId, action: newAction })
+            }).then(r => r.json()).then(res => {
+                if (res.success) loadCustomShows();
+            });
+        }
+
+        window.openDropdowns = new Set();
+        function toggleCustomDropdown(showId) {
+            const isCurrentlyOpen = window.openDropdowns.has(showId);
+            window.openDropdowns.clear();
+            if (!isCurrentlyOpen) {
+                window.openDropdowns.add(showId);
+            }
+            renderCustomShows();
+        }
+
+        function setExtraEpCustom(showId, checkboxElement) {
+            checkboxElement.disabled = true;
+            fetch('/api/buyers/{{ userid }}/custom_rules', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ show_id: showId, action: 'set_extra_ep', extra_ep: checkboxElement.checked })
+            }).then(r => r.json()).then(res => {
+                if (res.success) loadCustomShows();
+            });
+        }
+
+        function renderCustomShows() {
+            const rules = window.customRules || [];
+            const list = document.getElementById('custom-shows-list');
+            if (rules.length === 0) {
+                list.style.display = 'none';
+                list.innerHTML = '';
+                return;
+            }
+            
+            list.style.display = 'flex';
+            list.style.flexDirection = 'column';
+            list.style.gap = '0';
+            list.style.padding = '0';
+            list.style.background = 'transparent';
+            list.style.border = 'none';
+            list.style.boxShadow = 'none';
+            list.style.overflow = 'visible';
+            
+            let html = '';
+            rules.forEach((rule, index) => {
+                const isAllow = rule.type === 'allow';
+                const isDropdownOpen = window.openDropdowns.has(rule.show_id);
+                const prevOpen = index > 0 && window.openDropdowns.has(rules[index-1].show_id);
+                const nextOpen = index < rules.length - 1 && window.openDropdowns.has(rules[index+1].show_id);
+                
+                const isFirst = index === 0;
+                const isLast = index === rules.length - 1;
+                
+                const blockText = !isAllow ? `<span style="color: #fa5252; font-size: 11px; font-weight: 600;">Blocked Story</span>` : '';
+                const extraEpText = rule.extra_ep ? `<span style="color: #2b8a3e; font-size: 11px; font-weight: 600;">Extra Episodes Allowed</span>` : `<span style="color: #fa5252; font-size: 11px; font-weight: 600;">Extra Episode Not Allowed</span>`;
+                const labelsHtml = `
+                    <div style="display: flex; gap: 6px; margin-top: 2px; flex-wrap: wrap; align-items: center;">
+                        ${blockText}
+                        ${blockText && extraEpText ? '<span style="color: #ccc; font-size: 10px;">|</span>' : ''}
+                        ${extraEpText}
+                    </div>
+                `;
+
+                const nextAction = isAllow ? 'block' : 'allow';
+                const nextActionLabel = isAllow ? 'Block' : 'Allow';
+                const allowBlockColor = isAllow ? '#fa5252' : '#2481cc';
+                
+                const indicatorColor = isAllow ? '#2b8a3e' : '#fa5252';
+                
+                // Margin logic
+                let margin = '0';
+                if (isDropdownOpen) {
+                    if (isFirst && isLast) margin = '0';
+                    else if (isFirst) margin = '0 0 10px 0';
+                    else if (isLast) margin = '10px 0 0 0';
+                    else margin = '10px 0';
+                }
+                
+                // Radius logic
+                let radiusTop = '0';
+                let radiusBottom = '0';
+                
+                if (isDropdownOpen || isFirst || prevOpen) radiusTop = '10px';
+                if (isDropdownOpen || isLast || nextOpen) radiusBottom = '10px';
+                
+                const wrapperRadius = `border-radius: ${radiusTop} ${radiusTop} ${radiusBottom} ${radiusBottom};`;
+                
+                // Border logic
+                const borderRight = '1px solid #e0e0e0';
+                const borderLeft = '1px solid #e0e0e0';
+                let borderTop = (isFirst || isDropdownOpen || prevOpen) ? '1px solid #e0e0e0' : 'none';
+                let borderBottom = (isLast || isDropdownOpen || nextOpen) ? '1px solid #e0e0e0' : '1px solid #eee';
+                
+                // Background & Shadow
+                let cardBg = '#ffffff';
+                if (!isAllow) {
+                    cardBg = 'linear-gradient(to right, #fde3e1, #ffffff)';
+                } else {
+                    cardBg = 'linear-gradient(to right, #e4f3e5, #ffffff)';
+                }
+                const innerShadow = `box-shadow: inset 4px 0 0 0 ${indicatorColor};`;
+                
+                const iconTransform = isDropdownOpen ? 'rotate(180deg)' : 'rotate(0deg)';
+                const dropdownDisplay = isDropdownOpen ? 'block' : 'none';
+
+                html += `
+                <div id="wrapper-${rule.show_id}" style="margin: ${margin}; ${wrapperRadius} border-top: ${borderTop}; border-bottom: ${borderBottom}; border-right: ${borderRight}; border-left: ${borderLeft}; overflow: hidden; background: ${cardBg}; transition: margin 0.2s, border-radius 0.2s; box-sizing: border-box; position: relative; z-index: ${isDropdownOpen ? '10' : '1'};">
+                    <div id="card-${rule.show_id}" class="list-card" style="background: transparent; border-radius: 0; border: none; ${innerShadow} padding: 5px 10px 10px 10px; display: flex; flex-direction: column; text-align: left; align-items: stretch; transition: box-shadow 0.2s; box-sizing: border-box; width: 100%;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; text-align: left; cursor: pointer; margin-left: 5px;" onclick="toggleCustomDropdown('${rule.show_id}')">
+                            <div style="flex: 1; overflow: hidden; display: flex; flex-direction: column; padding-right: 10px; text-align: left;">
+                                <div class="list-title" style="white-space: normal; word-break: break-word; font-weight: 600; line-height: 1.3; text-align: left; padding-top: 5px;">${rule.title}</div>
+                                ${labelsHtml}
+                            </div>
+                            <div style="flex-shrink:0; display:flex; align-items:center; justify-content:center; width: 32px; height: 32px; background: transparent;">
+                                <svg style="transition: transform 0.2s; transform: ${iconTransform};" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1c1e21" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+                            </div>
+                        </div>
+                        <div style="display: ${dropdownDisplay}; margin-top: 12px; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 12px;">
+                        <div style="display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: nowrap;">
+                            <label style="cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; flex: 1; margin: 0; background: transparent; padding: 8px 0; border-radius: 6px; color: #1c1e21;">
+                                <input type="checkbox" class="checkbox" ${rule.extra_ep ? 'checked' : ''} onchange="setExtraEpCustom('${rule.show_id}', this)">
+                                <div class="custom-checkbox" style="width: 18px; height: 18px;">
+                                    <svg class="unchecked-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>
+                                    <svg class="checked-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10.656V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.344"/><path d="m9 11 3 3L22 4"/></svg>
+                                </div>
+                                <span style="font-size: 13px; font-weight: 600; white-space: nowrap;">Extra Episode</span>
+                            </label>
+                            
+                            <button onclick="toggleCustomRule('${rule.show_id}', '${nextAction}', this)" style="flex: 1; padding: 8px 0; border: none; border-radius: 6px; background: ${allowBlockColor}; color: white; font-weight: 600; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 13px; margin: 0; white-space: nowrap;">
+                                ${nextActionLabel}
+                            </button>
+                            <button onclick="showDeletePopup('${rule.show_id}', '${rule.title.replace(/'/g, "\\'")}')" style="flex: 1; padding: 8px 0; border: none; border-radius: 6px; background: #ffe3e3; color: #e03131; font-weight: 600; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 13px; margin: 0; white-space: nowrap;">
+                                Delete
+                            </button>
+                        </div>
+                        </div>
+                    </div>
+                </div>`;
+            });
+            list.innerHTML = html;
+        }
+
+        function loadCustomShows() {
+            fetch('/api/buyers/{{ userid }}/custom_rules')
+                .then(r => r.json())
+                .then(rules => {
+                    window.customRules = rules;
+                    renderCustomShows();
+                });
+        }
+
+        function loadBuyerInfo() {
+            fetch('/api/buyers/{{ userid }}/info')
+                .then(r => r.json())
+                .then(info => {
+                    document.getElementById('userNameInput').value = info.name;
+                    document.getElementById('cb_all_stories').checked = info.has_all;
+                    document.getElementById('cb_extra_episode').checked = info.extra_episode;
+                    document.getElementById('cb_custom_story').checked = info.custom_story;
+
+                    document.querySelectorAll('.lang-checkbox').forEach(cb => {
+                        cb.checked = info.allowed_langs.includes(cb.value);
+                    });
+
+                    document.getElementById('cb_set_cover').checked = info.set_cover;
+                    document.getElementById('cb_set_artist').checked = info.set_artist;
+
+                    const lbl = document.getElementById('validityLabel');
+                    lbl.textContent = info.expiry_text;
+                    lbl.style.color = info.expiry_color;
+
+                    document.querySelectorAll('input[name="durationRadio"]').forEach(r => r.checked = false);
+                    document.getElementById('customDaysInput').value = '';
+
+                    saveInitialState();
+                    checkChanges();
+                });
+        }
+
+        function switchTab(tabId, event) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+            document.getElementById(tabId).classList.add('active');
+
+            if (tabId === 'saved-shows-tab') {
+                loadSavedShows();
+            } else if (tabId === 'custom-shows-tab') {
+                loadCustomShows();
+            } else if (tabId === 'allowed-shows-tab' || tabId === 'settings-tab') {
+                loadBuyerInfo();
+            }
+
+            checkChanges();
+        }
+
+        function updateAll() {
+            const btn = document.getElementById('updateBtn');
+            btn.disabled = true;
+            btn.innerHTML = 'Updating';
+
+            const checkboxes = document.querySelectorAll('.lang-checkbox');
+            let newLangs = [];
+            checkboxes.forEach(cb => {
+                if (cb.checked) newLangs.push(cb.value);
+            });
+            const hasAll = document.getElementById('cb_all_stories').checked;
+            const extraEpisode = document.getElementById('cb_extra_episode').checked;
+
+            const userName = document.getElementById('userNameInput').value;
+            const durationEl = document.querySelector('input[name="durationRadio"]:checked');
+            const customDays = document.getElementById('customDaysInput').value;
+            let duration = durationEl ? durationEl.value : "";
+            if (customDays && customDays.trim() !== '') {
+                duration = customDays.trim() + " Days";
+            }
+            const setCover = document.getElementById('cb_set_cover').checked;
+            const setArtist = document.getElementById('cb_set_artist').checked;
+
+            const savedShows = Array.from(document.querySelectorAll('.saved-show-checkbox')).filter(cb => cb.checked).map(cb => cb.value);
+
+            fetch('/api/buyers/{{ userid }}/update_all', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    langs: newLangs,
+                    has_all: hasAll,
+                    extra_episode: extraEpisode,
+                    name: userName,
+                    duration: duration,
+                    set_cover: setCover,
+                    set_artist: setArtist,
+                    saved_shows: savedShows
+                })
+            }).then(r => r.json()).then(res => {
+                btn.disabled = false;
+                if (res.success) {
+                    btn.innerHTML = 'Updated';
+                    btn.style.backgroundColor = '#2b8a3e';
+
+                    if (res.expiry_text) {
+                        const lbl = document.getElementById('validityLabel');
+                        lbl.textContent = res.expiry_text;
+                        lbl.style.color = res.expiry_color;
+                        if (durationEl) durationEl.checked = false;
+                    }
+
+                    saveInitialState();
+                    checkChanges();
+
+                    setTimeout(() => {
+                        btn.innerHTML = 'Update';
+                        btn.style.backgroundColor = '#2481cc';
+                    }, 2000);
+                } else {
+                    btn.innerHTML = 'Update';
+                    alert('Failed to update allowed shows');
+                }
+            }).catch(e => {
+                btn.disabled = false;
+                btn.innerHTML = 'Update';
+                alert('Error updating shows');
+            });
+        }
+
+        let initialState = {};
+
+        function saveInitialState() {
+            initialState.userName = document.getElementById('userNameInput').value;
+            initialState.allStories = document.getElementById('cb_all_stories').checked;
+            initialState.extraEpisode = document.getElementById('cb_extra_episode').checked;
+            initialState.customStory = document.getElementById('cb_custom_story').checked;
+            initialState.langs = Array.from(document.querySelectorAll('.lang-checkbox')).map(cb => cb.checked);
+            initialState.duration = document.querySelector('input[name="durationRadio"]:checked') ? document.querySelector('input[name="durationRadio"]:checked').value : null;
+            initialState.customDays = document.getElementById('customDaysInput').value;
+            initialState.setCover = document.getElementById('cb_set_cover').checked;
+            initialState.setArtist = document.getElementById('cb_set_artist').checked;
+            initialState.savedShows = Array.from(document.querySelectorAll('.saved-show-checkbox')).map(cb => cb.value);
+        }
+
+        function checkChanges() {
+            const activeTab = document.querySelector('.tab-content.active').id;
+            const bottomBar = document.getElementById('bottomBar');
+            const btn = document.getElementById('updateBtn');
+            let hasChanges = false;
+
+            if (activeTab === 'saved-shows-tab') {
+                bottomBar.style.display = 'flex';
+                const currentSaved = Array.from(document.querySelectorAll('.saved-show-checkbox')).filter(cb => cb.checked).map(cb => cb.value);
+                if (currentSaved.length !== (initialState.savedShows ? initialState.savedShows.length : 0)) {
+                    hasChanges = true;
+                }
+            } else if (activeTab === 'custom-shows-tab') {
+                bottomBar.style.display = 'none';
+                return;
+            } else {
+                bottomBar.style.display = 'flex';
+            }
+
+            if (activeTab === 'allowed-shows-tab') {
+                const currentAllStories = document.getElementById('cb_all_stories').checked;
+                const currentExtraEpisode = document.getElementById('cb_extra_episode').checked;
+                const currentCustomStory = document.getElementById('cb_custom_story').checked;
+                const currentLangs = Array.from(document.querySelectorAll('.lang-checkbox')).map(cb => cb.checked);
+
+                if (currentAllStories !== initialState.allStories) hasChanges = true;
+                if (currentExtraEpisode !== initialState.extraEpisode) hasChanges = true;
+                if (currentCustomStory !== initialState.customStory) hasChanges = true;
+                for (let i = 0; i < currentLangs.length; i++) {
+                    if (currentLangs[i] !== initialState.langs[i]) {
+                        hasChanges = true;
+                        break;
+                    }
+                }
+            } else if (activeTab === 'settings-tab') {
+                const currentUserName = document.getElementById('userNameInput').value;
+                const currentDuration = document.querySelector('input[name="durationRadio"]:checked') ? document.querySelector('input[name="durationRadio"]:checked').value : null;
+                const currentCustomDays = document.getElementById('customDaysInput').value;
+                const currentSetCover = document.getElementById('cb_set_cover').checked;
+                const currentSetArtist = document.getElementById('cb_set_artist').checked;
+
+                if (currentUserName !== initialState.userName) hasChanges = true;
+                if (currentDuration !== initialState.duration) hasChanges = true;
+                if (currentCustomDays !== initialState.customDays) hasChanges = true;
+                if (currentSetCover !== initialState.setCover) hasChanges = true;
+                if (currentSetArtist !== initialState.setArtist) hasChanges = true;
+            }
+
+            if (hasChanges) {
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                btn.style.cursor = 'pointer';
+            } else {
+                btn.disabled = true;
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            saveInitialState();
+            checkChanges();
+            loadCustomShows();
+
+            document.querySelectorAll('input').forEach(el => {
+                el.addEventListener('change', checkChanges);
+                el.addEventListener('input', checkChanges);
+            });
+
+            document.addEventListener("keydown", function (e) {
+                if (e.target.type === "number" && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+                    e.preventDefault();
+                }
+            });
+
+            const allCb = document.getElementById('cb_all_stories');
+            const customStoryCb = document.getElementById('cb_custom_story');
+            const langCbs = document.querySelectorAll('.lang-checkbox');
+
+            allCb.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    langCbs.forEach(cb => cb.checked = true);
+                    customStoryCb.checked = false;
+                } else {
+                    langCbs.forEach(cb => cb.checked = false);
+                }
+                checkChanges();
+            });
+
+            customStoryCb.addEventListener('change', (e) => {
+                if (e.target.checked) {
+                    langCbs.forEach(cb => cb.checked = false);
+                    allCb.checked = false;
+                }
+                checkChanges();
+            });
+
+            langCbs.forEach(cb => {
+                cb.addEventListener('change', (e) => {
+                    if (e.target.checked) {
+                        customStoryCb.checked = false;
+                    }
+                    if (!e.target.checked) {
+                        allCb.checked = false;
+                    } else {
+                        const allChecked = Array.from(langCbs).every(c => c.checked);
+                        if (allChecked) allCb.checked = true;
+                    }
+                    checkChanges();
+                });
+            });
+        });
+    </script>
+    <!-- DELETE POPUP -->
+    <div id="delete-popup">
+        <div class="popup-box">
+            <h3>Confirm Delete</h3>
+            <p>Are you sure you want to delete...</p>
+            <div class="popup-btns">
+                <button class="cancel-btn" onclick="hideDeletePopup()">Cancel</button>
+                <button id="delete-btn-submit" class="confirm-btn" onclick="confirmDeleteRule()">Delete</button>
+            </div>
+        </div>
+    </div>
+</body>
+
+</html>
