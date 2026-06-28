@@ -1,0 +1,11 @@
+Pyrofork==2.4.0rc1
+tgcrypto==1.2.5
+requests==2.31.0
+pycryptodome==3.19.1
+pywidevine==1.8.0
+ffmpeg-python==0.2.0
+m3u8==4.0.0
+aiohttp==3.13.2
+flask==3.0.3
+python-dotenv
+aiogram
