@@ -649,24 +649,28 @@ async def download_avatar_bg(uid, client):
 async def start(client, message):
     if message.chat.id == Config.ADMIN_GROUP:
         return await message.reply(
-            "RioRio Downloader\n\n"
+            "Rio Rio Downloader\n\n"
             "For Admins...\n"
             "/dashboard Dashboard URL\n"
-            "/backup Backup database\n"
-            "/restart Restart bot\n\n"
+            "/backup Backup Database\n"
+            "/restart Restart Bot\n\n"
             "For Owner Only...\n"
-            "/update Pull and restart\n"
-            "/restore Restore database"
+            "/update Pull and Restart\n"
+            "/restore Restore Database"
         )
-    await set_cmds(client)
+    # Removing set_cmds to avoid global rate limiting and hanging
     if message.from_user:
         uid = message.from_user.id
         name = message.from_user.first_name
         username = message.from_user.username
-        if not username and hasattr(message.from_user, 'active_usernames') and message.from_user.active_usernames:
-            username = message.from_user.active_usernames[0]
-        elif not username and hasattr(message.from_user, 'usernames') and message.from_user.usernames:
-            username = message.from_user.usernames[0].username
+        try:
+            if not username and hasattr(message.from_user, 'active_usernames') and message.from_user.active_usernames:
+                username = message.from_user.active_usernames[0]
+            elif not username and hasattr(message.from_user, 'usernames') and message.from_user.usernames:
+                username = message.from_user.usernames[0].username
+        except Exception as e:
+            logger.error(f"Error extracting username: {e}")
+            pass
     else:
         uid = message.sender_chat.id
         name = message.sender_chat.title
