@@ -2,6 +2,7 @@ import requests as req
 import base64
 import re
 import os
+import xml.etree.ElementTree as ET
 import subprocess
 import hashlib
 import asyncio
@@ -230,6 +231,36 @@ class PFMDownloader:
             json=d
         )
            
+    async def get_audio_url_from_video_mpd(self, video_mpd_url):
+        """Fetch video MPD and extract the audio BaseURL to build direct audio download URL."""
+        for attempt in range(3):
+            try:
+                session = await self.get_session()
+                async with session.get(video_mpd_url) as res:
+                    if res.status == 200:
+                        txt = await res.text()
+                        root = ET.fromstring(txt)
+                        ns = {'mpd': 'urn:mpeg:dash:schema:mpd:2011'}
+                        for adapt in root.findall('.//mpd:AdaptationSet', ns):
+                            if adapt.get('contentType') == 'audio':
+                                rep = adapt.find('.//mpd:Representation', ns)
+                                if rep is not None:
+                                    base_url_el = rep.find('mpd:BaseURL', ns)
+                                    if base_url_el is not None and base_url_el.text:
+                                        audio_filename = base_url_el.text.strip()
+                                        # Build full URL relative to MPD location
+                                        mpd_base = video_mpd_url.rsplit('/', 1)[0]
+                                        full_audio_url = f"{mpd_base}/{audio_filename}"
+                                        logger.info(f"Extracted audio URL from video MPD: {full_audio_url}")
+                                        return full_audio_url
+                        logger.warning(f"No audio AdaptationSet found in video MPD: {video_mpd_url}")
+                    else:
+                        logger.warning(f"Video MPD fetch failed with status {res.status}")
+            except Exception as e:
+                logger.error(f"Video MPD parse error (Attempt {attempt+1}): {e}")
+            await asyncio.sleep(2)
+        return None
+
     async def get_pssh(self,url):
         for attempt in range(3):
             try:
@@ -379,8 +410,7 @@ class PFMDownloader:
                     
                     mpd = ep[1]
                     duration = ep[3] if len(ep) > 3 else 0
-                    is_video = ep[4] if len(ep) > 4 else False
-
+                    ep_type = ep[4] if len(ep) > 4 else "type1"
                     
                     clean_name = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', name, flags=re.IGNORECASE).strip()
                     clean_name = re.sub(r'^\d+[\s\-.:,]+', '', clean_name).strip()
@@ -411,33 +441,88 @@ class PFMDownloader:
                         if on_complete:
                             await on_complete(seq_num, m4a, dur)
                         files.append((seq_num, m4a, dur))
-                    else:
+                    elif ep_type == "type2":
+                        # Type 2: Video MPD -> extract audio URL -> direct download (no DRM)
                         download_success = False
+                        video_mpd_url = mpd  # This is the android video_url
                         
-                        if is_video:
-                            audio_url = ""
+                        for attempt in range(3):
+                            if cancel_flag and cancel_flag(): break
                             try:
-                                session = await self.get_session()
-                                async with session.get(mpd) as res:
-                                    if res.status == 200:
-                                        xml_text = await res.text()
-                                        match = re.search(r'<AdaptationSet[^>]*contentType="audio"[^>]*>.*?<BaseURL>([^<]+)</BaseURL>', xml_text, re.DOTALL)
-                                        if match:
-                                            base_audio = match.group(1).strip()
-                                            audio_url = mpd.rsplit("/", 1)[0] + "/" + base_audio
+                                audio_url = await self.get_audio_url_from_video_mpd(video_mpd_url)
+                                if not audio_url:
+                                    logger.warning(f"No audio URL from video MPD for Ep.{seq_num} (Attempt {attempt+1})")
+                                    await asyncio.sleep(2)
+                                    continue
+                                
+                                proc = await asyncio.create_subprocess_exec(
+                                    "ffmpeg", "-y", "-loglevel", "error",
+                                    "-i", audio_url,
+                                    "-vn", "-c:a", "copy", m4a
+                                )
+                                self.current_processes.append(proc)
+                                if process_tracker is not None:
+                                    process_tracker.append(proc)
+                                try:
+                                    await asyncio.wait_for(proc.wait(), timeout=300)
+                                except:
+                                    try: proc.kill(); await proc.wait()
+                                    except: pass
+                                finally:
+                                    if proc in self.current_processes:
+                                        self.current_processes.remove(proc)
+                                    if process_tracker is not None and proc in process_tracker:
+                                        process_tracker.remove(proc)
+                                
+                                if os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
+                                    dur = 0
+                                    try:
+                                        pr = await asyncio.create_subprocess_exec(
+                                            "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                            "-of", "default=noprint_wrappers=1:nokey=1", m4a,
+                                            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+                                        )
+                                        out, _ = await pr.communicate()
+                                        dur = int(float(out.decode().strip()))
+                                    except:
+                                        dur = int(duration) if duration else 0
+                                    
+                                    if on_complete:
+                                        await on_complete(seq_num, m4a, dur)
+                                    files.append((seq_num, m4a, dur))
+                                    download_success = True
+                                    logger.info(f"Success Ep.{seq_num} via Type2 (video MPD audio)")
+                                    break
                             except Exception as e:
-                                logger.error(f"Error parsing video MPD for Ep.{seq_num}: {e}")
-                                
-                            if not audio_url:
-                                audio_url = mpd.rsplit("/", 1)[0] + "/audio.mp4"
-                                
-                            for attempt in range(3):
+                                self.last_download_error = str(e)
+                                logger.error(f"Worker Error Ep.{seq_num} (Type2, Attempt {attempt+1}): {e}")
+                            await asyncio.sleep(1)
+                        
+                        if not download_success:
+                            logger.error(f"FAILED Ep.{seq_num} after Type2 retries.")
+                            if on_complete:
+                                await on_complete(seq_num, None, 0)
+                    else:
+                        # Type 1: DRM-encrypted media_url_enc flow (existing logic)
+                        download_success = False
+                        # Try each quality
+                        for q in qualities:
+                            if download_success: break
+                            link = mpd.rsplit("/", 1)[0] + f"/protected_audio_mpd_{q}k.mp4"
+                            
+                            for attempt in range(3): # 3 attempts per quality
                                 if cancel_flag and cancel_flag(): break
                                 try:
+                                    _, key = await self.get_keys(mpd, show_id)
+                                    if not key: 
+                                        logger.warning(f"No key for Ep.{seq_num} (Attempt {attempt+1})")
+                                        await asyncio.sleep(2)
+                                        continue
+
                                     proc = await asyncio.create_subprocess_exec(
                                         "ffmpeg", "-y", "-loglevel", "error",
-                                        "-i", audio_url,
-                                        "-vn", "-c:a", "copy", m4a
+                                        "-decryption_key", key, "-i", link,
+                                        "-map", "0:a:0", "-vn", "-c:a", "copy", m4a
                                     )
                                     self.current_processes.append(proc)
                                     if process_tracker is not None:
@@ -470,81 +555,17 @@ class PFMDownloader:
                                             await on_complete(seq_num, m4a, dur)
                                         files.append((seq_num, m4a, dur))
                                         download_success = True
-                                        logger.info(f"Success Ep.{seq_num} via Video Audio")
+                                        logger.info(f"Success Ep.{seq_num} at {q}k")
                                         break
                                 except Exception as e:
                                     self.last_download_error = str(e)
-                                    logger.error(f"Worker Error Ep.{seq_num} (Video, Attempt {attempt+1}): {e}")
+                                    logger.error(f"Worker Error Ep.{seq_num} (Quality {q}k, Attempt {attempt+1}): {e}")
                                 await asyncio.sleep(1)
-                                
-                            if not download_success:
-                                logger.error(f"FAILED Ep.{seq_num} via Video Audio after retries.")
-                                if on_complete:
-                                    await on_complete(seq_num, None, 0)
                         
-                        else:
-                            # Try each quality
-                            for q in qualities:
-                                if download_success: break
-                                link = mpd.rsplit("/", 1)[0] + f"/protected_audio_mpd_{q}k.mp4"
-                                
-                                for attempt in range(3): # 3 attempts per quality
-                                    if cancel_flag and cancel_flag(): break
-                                    try:
-                                        _, key = await self.get_keys(mpd, show_id)
-                                        if not key: 
-                                            logger.warning(f"No key for Ep.{seq_num} (Attempt {attempt+1})")
-                                            await asyncio.sleep(2)
-                                            continue
-
-                                        proc = await asyncio.create_subprocess_exec(
-                                            "ffmpeg", "-y", "-loglevel", "error",
-                                            "-decryption_key", key, "-i", link,
-                                            "-map", "0:a:0", "-vn", "-c:a", "copy", m4a
-                                        )
-                                        self.current_processes.append(proc)
-                                        if process_tracker is not None:
-                                            process_tracker.append(proc)
-                                        try:
-                                            await asyncio.wait_for(proc.wait(), timeout=300)
-                                        except:
-                                            try: proc.kill(); await proc.wait()
-                                            except: pass
-                                        finally:
-                                            if proc in self.current_processes:
-                                                self.current_processes.remove(proc)
-                                            if process_tracker is not None and proc in process_tracker:
-                                                process_tracker.remove(proc)
-
-                                        if os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
-                                            dur = 0
-                                            try:
-                                                pr = await asyncio.create_subprocess_exec(
-                                                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
-                                                    "-of", "default=noprint_wrappers=1:nokey=1", m4a,
-                                                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
-                                                )
-                                                out, _ = await pr.communicate()
-                                                dur = int(float(out.decode().strip()))
-                                            except:
-                                                dur = int(duration) if duration else 0
-                                            
-                                            if on_complete:
-                                                await on_complete(seq_num, m4a, dur)
-                                            files.append((seq_num, m4a, dur))
-                                            download_success = True
-                                            logger.info(f"Success Ep.{seq_num} at {q}k")
-                                            break
-                                    except Exception as e:
-                                        self.last_download_error = str(e)
-                                        logger.error(f"Worker Error Ep.{seq_num} (Quality {q}k, Attempt {attempt+1}): {e}")
-                                    await asyncio.sleep(1)
-                            
-                            if not download_success:
-                                logger.error(f"FAILED Ep.{seq_num} after all qualities and retries.")
-                                if on_complete:
-                                    await on_complete(seq_num, None, 0)
-
+                        if not download_success:
+                            logger.error(f"FAILED Ep.{seq_num} after all qualities and retries.")
+                            if on_complete:
+                                await on_complete(seq_num, None, 0)
                 finally:
                     queue.task_done()
 
@@ -576,22 +597,26 @@ class PFMDownloader:
                 s = i.get("natural_sequence_number", 0)
                 if seq <= s <= end and s not in processed_metadata:
                     mapping[i.get('seq_number')] = s
-                    is_video = False
-                    media = ""
                     
-                    if "video_info" in i and "android" in i["video_info"] and "video_url" in i["video_info"]["android"]:
-                        media = i["video_info"]["android"]["video_url"]
-                        is_video = True
-                    elif i.get("media_url_enc", ""):
-                        media = i.get("media_url_enc", "")
-                        is_video = False
-                        
-                    if media:
-                        info = (i.get("story_title"), media, s, i.get("duration"), is_video)
+                    # Priority: Type 2 (video_info.android.video_url) > Type 1 (media_url_enc)
+                    video_info = i.get("video_info", {})
+                    android_video = video_info.get("android", {}).get("video_url", "") if video_info else ""
+                    media = i.get("media_url_enc", "")
+                    
+                    if android_video:
+                        info = (i.get("story_title"), android_video, s, i.get("duration"), "type2")
                         await queue.put((s, info))
                         processed_metadata.add(s)
                         if progress_callback:
-
+                            try:
+                                if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
+                                else: progress_callback(s)
+                            except: pass
+                    elif media:
+                        info = (i.get("story_title"), media, s, i.get("duration"), "type1")
+                        await queue.put((s, info))
+                        processed_metadata.add(s)
+                        if progress_callback:
                             try:
                                 if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
                                 else: progress_callback(s)
@@ -608,22 +633,25 @@ class PFMDownloader:
                 for i in saved_stories:
                     s = mapping.get(i.get('seq_number'))
                     if s and s not in processed_metadata:
-                        is_video = False
-                        media = ""
+                        # Priority: Type 2 (video_info.android.video_url) > Type 1 (media_url_enc)
+                        video_info = i.get("video_info", {})
+                        android_video = video_info.get("android", {}).get("video_url", "") if video_info else ""
+                        media = i.get("media_url_enc", "")
                         
-                        if "video_info" in i and "android" in i["video_info"] and "video_url" in i["video_info"]["android"]:
-                            media = i["video_info"]["android"]["video_url"]
-                            is_video = True
-                        elif i.get("media_url_enc", ""):
-                            media = i.get("media_url_enc", "")
-                            is_video = False
-                            
-                        if media:
-                            info = (i.get("story_title"), media, s, i.get("duration"), is_video)
+                        if android_video:
+                            info = (i.get("story_title"), android_video, s, i.get("duration"), "type2")
                             await queue.put((s, info))
                             processed_metadata.add(s)
                             if progress_callback:
-
+                                try:
+                                    if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
+                                    else: progress_callback(s)
+                                except: pass
+                        elif media:
+                            info = (i.get("story_title"), media, s, i.get("duration"), "type1")
+                            await queue.put((s, info))
+                            processed_metadata.add(s)
+                            if progress_callback:
                                 try:
                                     if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
                                     else: progress_callback(s)
