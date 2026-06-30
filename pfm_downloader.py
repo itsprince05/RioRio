@@ -383,12 +383,17 @@ class PFMDownloader:
         
         async def worker():
             while True:
-                if cancel_flag and cancel_flag():
-                    break
-                
                 try:
                     item = await asyncio.wait_for(queue.get(), timeout=1.0)
                 except asyncio.TimeoutError:
+                    continue
+                
+                if item is None:
+                    queue.task_done()
+                    break
+                
+                if cancel_flag and cancel_flag():
+                    queue.task_done()
                     continue
                 
                 if item is None:
@@ -599,7 +604,14 @@ class PFMDownloader:
                     android_video_url = video_info.get("android", {}).get("video_url", "") if video_info else ""
                     if media or android_video_url:
                         info = (i.get("story_title"), media, s, i.get("duration"), android_video_url)
-                        await queue.put((s, info))
+                        while True:
+                            if cancel_flag and cancel_flag():
+                                break
+                            try:
+                                await asyncio.wait_for(queue.put((s, info)), timeout=1.0)
+                                break
+                            except asyncio.TimeoutError:
+                                pass
                         processed_metadata.add(s)
                         if progress_callback:
                             try:
@@ -623,7 +635,14 @@ class PFMDownloader:
                         android_video_url = video_info.get("android", {}).get("video_url", "") if video_info else ""
                         if media or android_video_url:
                             info = (i.get("story_title"), media, s, i.get("duration"), android_video_url)
-                            await queue.put((s, info))
+                            while True:
+                                if cancel_flag and cancel_flag():
+                                    break
+                                try:
+                                    await asyncio.wait_for(queue.put((s, info)), timeout=1.0)
+                                    break
+                                except asyncio.TimeoutError:
+                                    pass
                             processed_metadata.add(s)
                             if progress_callback:
                                 try:
