@@ -130,7 +130,7 @@ class PFMDownloader:
                         logger.warning(f"Unauthorized (status {res.status}). Refreshing token...")
                         self.refresh_auth_token()
                         if "headers" in kwargs:
-                            kwargs["headers"] = self.header.copy()
+                            kwargs["headers"]["authorization"] = self.header.get("authorization", "")
                     elif res.status == 429:
                         wait = int(res.headers.get("Retry-After", 5))
                         await asyncio.sleep(wait)
@@ -404,7 +404,7 @@ class PFMDownloader:
                             else: on_start(seq_num, raw_name)
                         except: pass
                         
-                    name = re.sub(r'[^\w\s\-,.\']', '', raw_name)
+                    name = re.sub(r'[^a-zA-Z0-9\s\-]', '', raw_name)
                     name = re.sub(r'\s+', ' ', name).strip()
                     
                     mpd = ep[1]
@@ -418,7 +418,7 @@ class PFMDownloader:
                     else:
                         filename = f"Ep {seq_num}.m4a"
                     
-                    show_title_cleaned = re.sub(r"[^a-zA-Z0-9 ]", "", self.current_show_title).strip()
+                    show_title_cleaned = re.sub(r"[^a-zA-Z0-9\s\-]", "", self.current_show_title).strip()
                     show_dir = os.path.join(output_dir, show_title_cleaned)
                     os.makedirs(show_dir, exist_ok=True)
                     m4a = os.path.join(show_dir, filename)
@@ -634,11 +634,17 @@ class PFMDownloader:
             for mapped_seq, mapped_s in mapping.items():
                 if mapped_s not in processed_metadata:
                     logger.warning(f"Metadata permanently missing for Ep.{mapped_s}. Skipping...")
+                    title = next((i.get("story_title", "") for i in stories if i.get("natural_sequence_number") == mapped_s), "")
                     processed_metadata.add(mapped_s)
                     if progress_callback:
                         try:
                             if asyncio.iscoroutinefunction(progress_callback): await progress_callback(mapped_s)
                             else: progress_callback(mapped_s)
+                        except: pass
+                    if on_start:
+                        try:
+                            if asyncio.iscoroutinefunction(on_start): await on_start(mapped_s, title)
+                            else: on_start(mapped_s, title)
                         except: pass
                     if on_complete:
                         try:
@@ -646,8 +652,12 @@ class PFMDownloader:
                             else: on_complete(mapped_s, None, 0)
                         except: pass
 
-            # Safe increment to cover all indices even if sequence numbers have gaps
-            current_seq += len(stories)
+            # Safe increment: advance based on the maximum seq_number returned by the API
+            max_seq = max((i.get('seq_number', 0) for i in stories), default=0)
+            if max_seq >= current_seq:
+                current_seq = max_seq + 1
+            else:
+                current_seq += len(stories)
 
         # Signal that metadata discovery is complete
         if discovery_done:
