@@ -155,18 +155,19 @@ class PFMDownloader:
         
         data = await self._make_request(
             'GET',
-            f'{self.base}/v2/content_api/show.get_details?show_id={show_id}&curr_ptr={seq-1}&info_level={info_level}',
+            f'{self.base}/v2/content_api/show.get_episodes?show_id={show_id}&curr_ptr={seq-1}&info_level={info_level}',
             headers=custom_headers
         )
         
         if data and data.get("status") == 1:
-            res_list = data.get("result", [])
-            if res_list:
-                item = res_list[0]
-                data["result"] = {
-                    "show_title": item.get("show_title"),
-                    "stories": item.get("stories", [])
-                }
+            res = data.get("result", {})
+            if isinstance(res, list) and res:
+                res = res[0]
+            
+            data["result"] = {
+                "show_title": res.get("show_title", ""),
+                "stories": res.get("stories", [])
+            }
         return data
 
     async def get_show_info(self, show_id, info_level='max'):
