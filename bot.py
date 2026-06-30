@@ -1230,7 +1230,11 @@ async def handle_messages(client, message):
                 pipeline_state = {
                     "discovered": 0, "downloaded": 0, "uploaded": 0,
                     "failed": 0, "total": len(t_episodes),
-                    "status": "Starting discovery..."
+                    "status": "Starting discovery...",
+                    "failed_downloads": [],
+                    "failed_uploads": [],
+                    "successful_downloads": [],
+                    "successful_uploads": []
                 }
                 
                 cancel_flags[uid] = False
@@ -1255,14 +1259,24 @@ async def handle_messages(client, message):
                     if not filepath:
                         logger.error(f"Download failed upstream for Ep {seq}")
                         pipeline_state["failed"] += 1
+                        pipeline_state["failed_downloads"].append(seq)
+                        
+                        if seq in msg_objs:
+                            try:
+                                msg_text = msg_objs[seq].text
+                                ep_title = msg_text.split('\n\n')[-1]
+                                await t_msg.reply(f"Error...\n\n{ep_title}")
+                            except: pass
+                            try: await msg_objs[seq].delete()
+                            except: pass
+                            del msg_objs[seq]
+                        else:
+                            await t_msg.reply(f"Error...\n\nEp {seq}")
+                            
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
                         semaphore.release()
-                        if seq in msg_objs:
-                            try: await msg_objs[seq].delete()
-                            except: pass
-                            del msg_objs[seq]
                         return
 
                     pipeline_state["status"] = f"Uploading Ep {seq}..."
@@ -1323,9 +1337,11 @@ async def handle_messages(client, message):
 
                             successful_uploads += 1
                             pipeline_state["uploaded"] += 1
+                            pipeline_state["successful_uploads"].append(seq)
                         else:
                             logger.error(f"Aiogram upload PERMANENTLY FAILED for Ep {seq}")
                             pipeline_state["failed"] += 1
+                            pipeline_state["failed_uploads"].append(seq)
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
                                     
@@ -1378,8 +1394,10 @@ async def handle_messages(client, message):
                             pass
 
                 async def download_complete_callback(seq, filepath, duration):
+                    if filepath:
+                        pipeline_state["successful_downloads"].append(seq)
+                        pipeline_state["downloaded"] += 1
                     await upload_queue.put((seq, filepath, duration))
-                    pipeline_state["downloaded"] += 1
 
                 async def discovery_callback(seq):
                     await semaphore.acquire()
@@ -1436,13 +1454,28 @@ async def handle_messages(client, message):
                             user_queues[uid].clear()
                         await t_msg.reply("Process stopped and waiting list is cleared...")
                         break
-                    elif successful_uploads > 0:
+                    elif successful_uploads > 0 or len(pipeline_state["failed_downloads"]) > 0:
+                        f_dl = ", ".join(map(str, sorted(pipeline_state["failed_downloads"])))
+                        f_up = ", ".join(map(str, sorted(pipeline_state["failed_uploads"])))
+                        
+                        summary = (
+                            f"Task Completed...\n\n"
+                            f"Total - {pipeline_state['total']}\n"
+                            f"Downloaded - {pipeline_state['downloaded']}\n"
+                            f"Failed - {len(pipeline_state['failed_downloads'])}"
+                        )
+                        if f_dl: summary += f" ({f_dl})"
+                        
+                        summary += f"\n\nUploaded - {pipeline_state['uploaded']}\n"
+                        summary += f"Failed - {len(pipeline_state['failed_uploads'])}"
+                        if f_up: summary += f" ({f_up})"
+
                         if not user_queues.get(uid):
-                            await t_msg.reply("Task Completed...")
+                            await t_msg.reply(summary)
                             if task_counter > 1:
                                 await t_msg.reply("All Task Completed...")
                         else:
-                            await t_msg.reply("Task Completed...")
+                            await t_msg.reply(summary)
                     else:
                         error_msg = getattr(downloader, "last_download_error", None)
                         user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
