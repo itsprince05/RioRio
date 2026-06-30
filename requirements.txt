@@ -9,4 +9,3 @@ aiohttp==3.13.2
 flask==3.0.3
 python-dotenv
 aiogram
-telethon
