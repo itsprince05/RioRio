@@ -1475,7 +1475,7 @@ async def handle_messages(client, message):
                         
                         summary = (
                             f"Task Completed...\n\n"
-                            f"Total - {pipeline_state['total']}\n"
+                            f"Total - {pipeline_state['total']}\n\n"
                             f"Downloaded - {pipeline_state['downloaded']}\n"
                             f"Failed - {len(pipeline_state['failed_downloads'])}"
                         )
