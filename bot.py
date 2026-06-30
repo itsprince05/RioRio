@@ -4,6 +4,7 @@ import asyncio
 import re
 import logging
 import shutil
+import html
 import aiohttp
 from aiohttp import web
 import sys
@@ -208,7 +209,7 @@ async def send_log(log_ch_key, text, photo=None):
                 payload.add_field("chat_id", str(chat_id))
                 payload.add_field("photo", photo)
                 payload.add_field("caption", text)
-                payload.add_field("parse_mode", "Markdown")
+                payload.add_field("parse_mode", "HTML")
                 async with session.post(url + "sendPhoto", data=payload) as resp:
                     res = await resp.json()
                     if res.get("ok"): 
@@ -216,7 +217,7 @@ async def send_log(log_ch_key, text, photo=None):
                         return True
             
             # Text fallback if photo failed or wasn't provided
-            payload = {"chat_id": str(chat_id), "text": text, "parse_mode": "Markdown"}
+            payload = {"chat_id": str(chat_id), "text": text, "parse_mode": "HTML"}
             async with session.post(url + "sendMessage", json=payload) as resp:
                 res = await resp.json()
                 if res.get("ok"):
@@ -244,8 +245,8 @@ async def fast_upload(chat_id, filepath, title, artist, duration, thumb_path=Non
     data.add_field('title', title)
     data.add_field('performer', artist)
     data.add_field('duration', str(duration))
-    data.add_field('caption', f"{title}")
-    data.add_field('parse_mode', 'Markdown')
+    data.add_field('caption', f"<b>{html.escape(title)}</b>")
+    data.add_field('parse_mode', 'HTML')
     
     audio_file = open(filepath, 'rb')
     data.add_field('audio', audio_file, filename=os.path.basename(filepath))
@@ -716,9 +717,9 @@ async def start(client, message):
     if not allowed:
         if not is_group:
             if msg == "Subscription Expired Renew it":
-                await message.reply(f"Hey {name}\n\nYour validity has expired\n\nContact Admin...")
+                await message.reply(f"Hey {name}\n\nYour validity has expired\n\nContact Admin\n@Index_Guide")
             else:
-                await message.reply(f"Hey {name}\n\nYou are not authorised\n\nContact Admin...")
+                await message.reply(f"Hey {name}\n\nContact Admin\n@Index_Guide")
         return
 
     if is_group:
@@ -1230,11 +1231,7 @@ async def handle_messages(client, message):
                 pipeline_state = {
                     "discovered": 0, "downloaded": 0, "uploaded": 0,
                     "failed": 0, "total": len(t_episodes),
-                    "status": "Starting discovery...",
-                    "failed_downloads": [],
-                    "failed_uploads": [],
-                    "successful_downloads": [],
-                    "successful_uploads": []
+                    "status": "Starting discovery..."
                 }
                 
                 cancel_flags[uid] = False
@@ -1259,24 +1256,14 @@ async def handle_messages(client, message):
                     if not filepath:
                         logger.error(f"Download failed upstream for Ep {seq}")
                         pipeline_state["failed"] += 1
-                        pipeline_state["failed_downloads"].append(seq)
-                        
-                        if seq in msg_objs:
-                            try:
-                                msg_text = msg_objs[seq].text
-                                ep_title = msg_text.split('\n\n')[-1]
-                                await t_msg.reply(f"Error...\n\n{ep_title}")
-                            except: pass
-                            try: await msg_objs[seq].delete()
-                            except: pass
-                            del msg_objs[seq]
-                        else:
-                            await t_msg.reply(f"Error...\n\nEp {seq}")
-                            
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
                         semaphore.release()
+                        if seq in msg_objs:
+                            try: await msg_objs[seq].delete()
+                            except: pass
+                            del msg_objs[seq]
                         return
 
                     pipeline_state["status"] = f"Uploading Ep {seq}..."
@@ -1337,11 +1324,9 @@ async def handle_messages(client, message):
 
                             successful_uploads += 1
                             pipeline_state["uploaded"] += 1
-                            pipeline_state["successful_uploads"].append(seq)
                         else:
                             logger.error(f"Aiogram upload PERMANENTLY FAILED for Ep {seq}")
                             pipeline_state["failed"] += 1
-                            pipeline_state["failed_uploads"].append(seq)
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
                                     
@@ -1394,10 +1379,8 @@ async def handle_messages(client, message):
                             pass
 
                 async def download_complete_callback(seq, filepath, duration):
-                    if filepath:
-                        pipeline_state["successful_downloads"].append(seq)
-                        pipeline_state["downloaded"] += 1
                     await upload_queue.put((seq, filepath, duration))
+                    pipeline_state["downloaded"] += 1
 
                 async def discovery_callback(seq):
                     await semaphore.acquire()
@@ -1454,28 +1437,13 @@ async def handle_messages(client, message):
                             user_queues[uid].clear()
                         await t_msg.reply("Process stopped and waiting list is cleared...")
                         break
-                    elif successful_uploads > 0 or len(pipeline_state["failed_downloads"]) > 0:
-                        f_dl = ", ".join(map(str, sorted(pipeline_state["failed_downloads"])))
-                        f_up = ", ".join(map(str, sorted(pipeline_state["failed_uploads"])))
-                        
-                        summary = (
-                            f"Task Completed...\n\n"
-                            f"Total - {pipeline_state['total']}\n\n"
-                            f"Downloaded - {pipeline_state['downloaded']}\n"
-                            f"Failed - {len(pipeline_state['failed_downloads'])}"
-                        )
-                        if f_dl: summary += f" ({f_dl})"
-                        
-                        summary += f"\n\nUploaded - {pipeline_state['uploaded']}\n"
-                        summary += f"Failed - {len(pipeline_state['failed_uploads'])}"
-                        if f_up: summary += f" ({f_up})"
-
+                    elif successful_uploads > 0:
                         if not user_queues.get(uid):
-                            await t_msg.reply(summary)
+                            await t_msg.reply("Task Completed...")
                             if task_counter > 1:
                                 await t_msg.reply("All Task Completed...")
                         else:
-                            await t_msg.reply(summary)
+                            await t_msg.reply("Task Completed...")
                     else:
                         error_msg = getattr(downloader, "last_download_error", None)
                         user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
