@@ -658,19 +658,15 @@ async def start(client, message):
             "/update Pull and Restart\n"
             "/restore Restore Database"
         )
-    # Removing set_cmds to avoid global rate limiting and hanging
+    # await set_cmds(client)
     if message.from_user:
         uid = message.from_user.id
         name = message.from_user.first_name
         username = message.from_user.username
-        try:
-            if not username and hasattr(message.from_user, 'active_usernames') and message.from_user.active_usernames:
-                username = message.from_user.active_usernames[0]
-            elif not username and hasattr(message.from_user, 'usernames') and message.from_user.usernames:
-                username = message.from_user.usernames[0].username
-        except Exception as e:
-            logger.error(f"Error extracting username: {e}")
-            pass
+        if not username and hasattr(message.from_user, 'active_usernames') and message.from_user.active_usernames:
+            username = message.from_user.active_usernames[0]
+        elif not username and hasattr(message.from_user, 'usernames') and message.from_user.usernames:
+            username = message.from_user.usernames[0].username
     else:
         uid = message.sender_chat.id
         name = message.sender_chat.title
@@ -1636,6 +1632,7 @@ async def delsave_callback(client, callback_query):
 async def main():
     await app.start()
     logger.info("Bots started!")
+    await set_cmds(app)
     
     restart_msg = None
     restart_action = "update"
