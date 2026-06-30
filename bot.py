@@ -1245,6 +1245,7 @@ async def handle_messages(client, message):
                 
                 locked_episodes = set()
                 episode_lock = asyncio.Lock()
+                msg_objs = {}
                 
                 async def perform_upload(task_data):
                     nonlocal successful_uploads, successful_downloads
@@ -1259,8 +1260,9 @@ async def handle_messages(client, message):
                             episode_lock.release()
                             locked_episodes.remove(seq)
                         semaphore.release()
-                        # Fire-and-forget error message
-                        asyncio.create_task(safe_send_msg(f"Download Error...\n\n{ep_title}"))
+                        # Delete downloading msg and send error (fire-and-forget)
+                        asyncio.create_task(bg_delete(seq))
+                        asyncio.create_task(bg_send_plain(f"Download Error...\n\n{ep_title}"))
                         return
 
                     successful_downloads += 1
@@ -1278,17 +1280,17 @@ async def handle_messages(client, message):
                         
                         logger.info(f"Aiogram Upload Start for Ep {seq}: {title}")
                         
-                        # Fire-and-forget status message (don't block upload)
-                        asyncio.create_task(safe_send_msg(f"Uploading...\n\n{ep_title}"))
+                        # Edit tracked msg to "Uploading..." (fire-and-forget)
+                        asyncio.create_task(bg_edit(seq, f"Uploading...\n\n{ep_title}"))
                         
                         # Start upload IMMEDIATELY
                         res_msg = None
                         for attempt in range(5):
                             if cancel_flags.get(uid): break
                             
-                            # Send retry notification (from 2nd attempt onwards)
+                            # Edit retry notification (from 2nd attempt onwards)
                             if attempt > 0:
-                                asyncio.create_task(safe_send_msg(f"Uploading...\nTrying {attempt + 1}\n\n{ep_title}"))
+                                asyncio.create_task(bg_edit(seq, f"Uploading...\nTrying {attempt + 1}\n\n{ep_title}"))
                             
                             try:
                                 file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
@@ -1330,7 +1332,7 @@ async def handle_messages(client, message):
                             pipeline_state["failed"] += 1
                             upload_failed_eps.append(seq)
                             # Fire-and-forget upload error message
-                            asyncio.create_task(safe_send_msg(f"Upload Error...\n\n{ep_title}"))
+                            asyncio.create_task(bg_send_plain(f"Upload Error...\n\n{ep_title}"))
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
                                     
@@ -1338,6 +1340,8 @@ async def handle_messages(client, message):
                         logger.error(f"Critical error in uploader Ep {seq}: {e}")
                         pipeline_state["failed"] += 1
                     finally:
+                        # Delete status message after upload (fire-and-forget)
+                        asyncio.create_task(bg_delete(seq))
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
@@ -1387,17 +1391,37 @@ async def handle_messages(client, message):
                     discovered_episodes.add(seq)
                     pipeline_state["discovered"] += 1
                     
-                async def safe_send_msg(text):
-                    """Fire-and-forget message sender that never blocks the pipeline"""
+                async def bg_send(seq, text):
+                    """Send message and track it for later edit/delete (fire-and-forget)"""
+                    try:
+                        msg = await client.send_message(t_chat_id, text)
+                        msg_objs[seq] = msg
+                    except: pass
+
+                async def bg_edit(seq, text):
+                    """Edit tracked message (fire-and-forget)"""
+                    if seq in msg_objs:
+                        try:
+                            await msg_objs[seq].edit(text)
+                        except: pass
+
+                async def bg_delete(seq):
+                    """Delete tracked message (fire-and-forget)"""
+                    if seq in msg_objs:
+                        try:
+                            await msg_objs[seq].delete()
+                        except: pass
+                        msg_objs.pop(seq, None)
+
+                async def bg_send_plain(text):
+                    """Send a standalone message, not tracked (fire-and-forget)"""
                     try:
                         await client.send_message(t_chat_id, text)
-                    except Exception:
-                        pass
+                    except: pass
 
                 async def start_download_callback(seq, title):
                     await episode_lock.acquire()
                     locked_episodes.add(seq)
-                    # Just store the title — no message, no delay
                     try:
                         import re
                         clean_title = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', title, flags=re.IGNORECASE).strip()
@@ -1407,15 +1431,17 @@ async def handle_messages(client, message):
                     except Exception as e:
                         episode_titles[seq] = f"Ep {seq}"
                         logger.error(f"Failed to process title for Ep {seq}: {e}")
+                    # Send "Downloading..." in background (tracked for later edit/delete)
+                    asyncio.create_task(bg_send(seq, f"Downloading...\n\n{episode_titles[seq]}"))
 
                 async def download_retry_callback(seq, attempt_num):
-                    """Called when download retries — sends retry notification"""
+                    """Called when download retries — edits the tracked message"""
                     ep_title = episode_titles.get(seq, f"Ep {seq}")
-                    asyncio.create_task(safe_send_msg(f"Downloading...\nTrying {attempt_num}\n\n{ep_title}"))
+                    asyncio.create_task(bg_edit(seq, f"Downloading...\nTrying {attempt_num}\n\n{ep_title}"))
 
                 async def not_found_callback(seq):
                     """Called when an episode is not found in the API after retries"""
-                    asyncio.create_task(safe_send_msg(f"Episode {seq} not found..."))
+                    asyncio.create_task(bg_send_plain(f"Episode {seq} not found..."))
 
                 up_task = asyncio.create_task(upload_worker())
 
@@ -1460,22 +1486,20 @@ async def handle_messages(client, message):
                     elif successful_uploads > 0 or successful_downloads > 0:
                         # Build detailed task summary
                         total_requested = len(t_episodes)
-                        dl_failed_text = ""
-                        ul_failed_text = ""
-                        if download_failed_eps:
-                            dl_failed_nums = ", ".join(str(e) for e in sorted(download_failed_eps))
-                            dl_failed_text = f"\nFailed - {len(download_failed_eps)} ({dl_failed_nums})"
-                        if upload_failed_eps:
-                            ul_failed_nums = ", ".join(str(e) for e in sorted(upload_failed_eps))
-                            ul_failed_text = f"\nFailed - {len(upload_failed_eps)} ({ul_failed_nums})"
+                        
+                        dl_failed_count = len(download_failed_eps)
+                        dl_failed_nums = f" ({', '.join(str(e) for e in sorted(download_failed_eps))})" if dl_failed_count > 0 else ""
+                        
+                        ul_failed_count = len(upload_failed_eps)
+                        ul_failed_nums = f" ({', '.join(str(e) for e in sorted(upload_failed_eps))})" if ul_failed_count > 0 else ""
                         
                         summary = (
                             f"Task Completed...\n\n"
                             f"Total - {total_requested}\n\n"
-                            f"Downloaded - {successful_downloads}"
-                            f"{dl_failed_text}\n\n"
-                            f"Uploaded - {successful_uploads}"
-                            f"{ul_failed_text}"
+                            f"Downloaded - {successful_downloads}\n"
+                            f"Failed - {dl_failed_count}{dl_failed_nums}\n\n"
+                            f"Uploaded - {successful_uploads}\n"
+                            f"Failed - {ul_failed_count}{ul_failed_nums}"
                         )
                         
                         await t_msg.reply(summary)
