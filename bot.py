@@ -652,13 +652,13 @@ async def start(client, message):
             "Rio Rio Downloader\n\n"
             "For Admins...\n"
             "/dashboard Dashboard URL\n"
-            "/backup Backup Database\n"
-            "/restart Restart Bot\n\n"
+            "/backup Backup database\n"
+            "/restart Restart bot\n\n"
             "For Owner Only...\n"
-            "/update Pull and Restart\n"
-            "/restore Restore Database"
+            "/update Pull and restart\n"
+            "/restore Restore database"
         )
-    # await set_cmds(client)
+    await set_cmds(client)
     if message.from_user:
         uid = message.from_user.id
         name = message.from_user.first_name
@@ -716,9 +716,9 @@ async def start(client, message):
     if not allowed:
         if not is_group:
             if msg == "Subscription Expired Renew it":
-                await message.reply(f"Hey {name}\n\nYour validity has expired\n\nContact Rio")
+                await message.reply(f"Hey {name}\n\nYour validity has expired\n\nContact Admin...")
             else:
-                await message.reply(f"Hey {name}\n\nContact Rio")
+                await message.reply(f"Hey {name}\n\nYou are not authorised\n\nContact Admin...")
         return
 
     if is_group:
@@ -1632,7 +1632,6 @@ async def delsave_callback(client, callback_query):
 async def main():
     await app.start()
     logger.info("Bots started!")
-    await set_cmds(app)
     
     restart_msg = None
     restart_action = "update"
