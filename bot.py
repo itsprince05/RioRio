@@ -1298,15 +1298,10 @@ async def handle_messages(client, message):
                         for attempt in range(3):
                             if cancel_flags.get(uid): break
                             try:
-                                file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
-                                if file_size > 49 * 1024 * 1024:
-                                    logger.info(f"File size {file_size} is > 49MB. Using Pyrogram for upload...")
-                                    res_msg = await app.send_audio(
-                                        t_chat_id, audio=filepath, caption=f"{title}",
-                                        title=title, performer=artist_name, duration=duration, thumb=thumb
-                                    )
-                                else:
-                                    res_msg = await fast_upload(t_chat_id, filepath, title, artist_name, duration, thumb)
+                                res_msg = await app.send_audio(
+                                    t_chat_id, audio=filepath, caption=title,
+                                    title=title, performer=artist_name, duration=duration, thumb=thumb
+                                )
                                 if res_msg: break
                             except (FloodWait) as e:
                                 wait_time = e.value if hasattr(e, "value") else (e.retry_after if hasattr(e, "retry_after") else 30)
