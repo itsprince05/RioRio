@@ -30,6 +30,12 @@ from helpers import (
 
 from pfm_downloader import PFMDownloader
 
+from telethon import TelegramClient
+from telethon.tl.types import DocumentAttributeAudio
+from fast_telethon import FastTelethon
+
+tele_client = TelegramClient("telethon_bot", Config.API_ID, Config.API_HASH)
+
 def get_user_info_level(uid, show_id=None):
     """Returns 'full' if user has extra_episode enabled, else 'max'"""
     # Owner always gets full access
@@ -1300,18 +1306,24 @@ async def handle_messages(client, message):
                         for attempt in range(3):
                             if cancel_flags.get(uid): break
                             try:
-                                res_msg = await app.send_audio(
-                                    t_chat_id, audio=filepath, caption=title,
-                                    title=title, performer=artist_name, duration=duration, thumb=thumb
+                                uploaded_file = await FastTelethon.upload_file(tele_client, filepath, workers=16)
+                                attrs = [DocumentAttributeAudio(duration=duration, title=title, performer=artist_name)]
+                                res_msg = await tele_client.send_file(
+                                    t_chat_id,
+                                    file=uploaded_file,
+                                    caption=title,
+                                    attributes=attrs,
+                                    thumb=thumb
                                 )
                                 if res_msg: break
-                            except (FloodWait) as e:
-                                wait_time = e.value if hasattr(e, "value") else (e.retry_after if hasattr(e, "retry_after") else 30)
-                                logger.warning(f"FloodWait in uploader Ep {seq}: {wait_time}s")
-                                await asyncio.sleep(wait_time + 1)
                             except Exception as e:
-                                logger.error(f"Upload attempt {attempt+1} failed for Ep {seq}: {e}")
-                                await asyncio.sleep(2)
+                                wait_time = 5
+                                if "FLOOD_WAIT" in str(e):
+                                    wait_time = int(str(e).split()[-2]) if any(char.isdigit() for char in str(e)) else 30
+                                    logger.warning(f"FloodWait in uploader Ep {seq}: {wait_time}s")
+                                else:
+                                    logger.error(f"Upload attempt {attempt+1} failed for Ep {seq}: {e}")
+                                await asyncio.sleep(wait_time + 1)
                         
                         if res_msg:
                             logger.info(f"Aiogram upload SUCCESS for Ep {seq}")
@@ -1670,6 +1682,7 @@ async def delsave_callback(client, callback_query):
 
 async def main():
     await app.start()
+    await tele_client.start(bot_token=Config.BOT_TOKEN)
     logger.info("Bots started!")
     
     restart_msg = None
@@ -1755,6 +1768,7 @@ async def main():
     asyncio.create_task(check_expired_task())
     await idle()
     await app.stop()
+    await tele_client.disconnect()
     await aio_bot.session.close()
 
 if __name__ == "__main__":
