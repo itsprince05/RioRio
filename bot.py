@@ -30,12 +30,6 @@ from helpers import (
 
 from pfm_downloader import PFMDownloader
 
-from telethon import TelegramClient
-from telethon.tl.types import DocumentAttributeAudio
-from fast_telethon import FastTelethon
-
-tele_client = TelegramClient("telethon_bot", Config.API_ID, Config.API_HASH)
-
 def get_user_info_level(uid, show_id=None):
     """Returns 'full' if user has extra_episode enabled, else 'max'"""
     # Owner always gets full access
@@ -242,7 +236,24 @@ async def send_log(log_ch_key, text, photo=None):
 
 
 
-async def fast_upload(chat_id, filepath, title, artist, duration, thumb_path=None):
+class UploadProgressReader:
+    def __init__(self, filename, progress_callback=None):
+        self.f = open(filename, 'rb')
+        self.total = os.path.getsize(filename)
+        self.current = 0
+        self.progress_callback = progress_callback
+    def read(self, size=-1):
+        data = self.f.read(size)
+        self.current += len(data)
+        if self.progress_callback:
+            self.progress_callback(self.current, self.total)
+        return data
+    def close(self):
+        self.f.close()
+    def __len__(self):
+        return self.total
+
+async def fast_upload(chat_id, filepath, title, artist, duration, thumb_path=None, progress_callback=None):
     """Upload using direct Bot API for faster speeds"""
     url = f"https://api.telegram.org/bot{Config.BOT_TOKEN}/sendAudio"
     
@@ -253,7 +264,7 @@ async def fast_upload(chat_id, filepath, title, artist, duration, thumb_path=Non
     data.add_field('duration', str(duration))
     data.add_field('caption', title)
     
-    audio_file = open(filepath, 'rb')
+    audio_file = UploadProgressReader(filepath, progress_callback) if progress_callback else open(filepath, 'rb')
     data.add_field('audio', audio_file, filename=os.path.basename(filepath))
     
     thumb_file = None
@@ -1265,20 +1276,19 @@ async def handle_messages(client, message):
                         logger.error(f"Download failed upstream for Ep {seq}")
                         download_failed_eps.append(seq)
                         pipeline_state["failed"] += 1
-                        # Send error message for failed download (fire-and-forget)
+                        # Send error message for failed download
                         ep_title = episode_titles.get(seq, f"Ep {seq}")
-                        async def _send_dl_error(s=seq, t=ep_title):
-                            try: await client.send_message(t_chat_id, f"Error...\n\n{t}")
-                            except: pass
-                            if s in msg_objs:
-                                try: await msg_objs[s].delete()
-                                except: pass
-                                del msg_objs[s]
-                        asyncio.create_task(_send_dl_error())
+                        try:
+                            await client.send_message(t_chat_id, f"Error...\n\n{ep_title}")
+                        except: pass
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
                         semaphore.release()
+                        if seq in msg_objs:
+                            try: await msg_objs[seq].delete()
+                            except: pass
+                            del msg_objs[seq]
                         return
 
                     pipeline_state["status"] = f"Uploading Ep {seq}..."
@@ -1293,37 +1303,56 @@ async def handle_messages(client, message):
                                 with open(artist_path, "r") as f: artist_name = f.read().strip()
                             except: pass
                         
-                        logger.info(f"Upload Start for Ep {seq}: {title}")
+                        upload_progress_dict = {"current": 0, "total": os.path.getsize(filepath) if os.path.exists(filepath) else 0, "done": False}
                         
-                        # Edit message in background (don't block upload)
-                        async def _edit_uploading(s=seq, t=title):
-                            if s in msg_objs:
-                                try: await msg_objs[s].edit(f"Uploading...\n\n{t}")
-                                except: pass
-                        asyncio.create_task(_edit_uploading())
+                        def fast_upload_cb(current, total):
+                            upload_progress_dict["current"] = current
+                            upload_progress_dict["total"] = total
+                        
+                        async def pyrogram_cb(current, total, *args):
+                            upload_progress_dict["current"] = current
+                            upload_progress_dict["total"] = total
+
+                        logger.info(f"Aiogram Upload Start for Ep {seq}: {title}")
+                        
+                        if seq in msg_objs:
+                            async def update_msg():
+                                last_time = 0
+                                while not upload_progress_dict["done"]:
+                                    now = time.time()
+                                    if now - last_time >= 3:
+                                        last_time = now
+                                        curr_mb = upload_progress_dict["current"] / (1024*1024)
+                                        tot_mb = upload_progress_dict["total"] / (1024*1024)
+                                        try: await msg_objs[seq].edit(f"Uploading...\n{curr_mb:.2f} MB / {tot_mb:.2f} MB\n\n{title}")
+                                        except: pass
+                                    await asyncio.sleep(1)
+                            asyncio.create_task(update_msg())
                         
                         res_msg = None
                         for attempt in range(3):
                             if cancel_flags.get(uid): break
                             try:
-                                uploaded_file = await FastTelethon.upload_file(tele_client, filepath, workers=16)
-                                attrs = [DocumentAttributeAudio(duration=duration, title=title, performer=artist_name)]
-                                res_msg = await tele_client.send_file(
-                                    t_chat_id,
-                                    file=uploaded_file,
-                                    caption=title,
-                                    attributes=attrs,
-                                    thumb=thumb
-                                )
-                                if res_msg: break
-                            except Exception as e:
-                                wait_time = 5
-                                if "FLOOD_WAIT" in str(e):
-                                    wait_time = int(str(e).split()[-2]) if any(char.isdigit() for char in str(e)) else 30
-                                    logger.warning(f"FloodWait in uploader Ep {seq}: {wait_time}s")
+                                file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
+                                if file_size > 49 * 1024 * 1024:
+                                    logger.info(f"File size {file_size} is > 49MB. Using Pyrogram for upload...")
+                                    res_msg = await app.send_audio(
+                                        t_chat_id, audio=filepath, caption=f"{title}",
+                                        title=title, performer=artist_name, duration=duration, thumb=thumb,
+                                        progress=pyrogram_cb
+                                    )
                                 else:
-                                    logger.error(f"Upload attempt {attempt+1} failed for Ep {seq}: {e}")
+                                    res_msg = await fast_upload(t_chat_id, filepath, title, artist_name, duration, thumb, progress_callback=fast_upload_cb)
+                                if res_msg: break
+                            except (FloodWait) as e:
+                                wait_time = e.value if hasattr(e, "value") else (e.retry_after if hasattr(e, "retry_after") else 30)
+                                logger.warning(f"FloodWait in uploader Ep {seq}: {wait_time}s")
                                 await asyncio.sleep(wait_time + 1)
+                            except Exception as e:
+                                logger.error(f"Upload attempt {attempt+1} failed for Ep {seq}: {e}")
+                                await asyncio.sleep(2)
+                                
+                        upload_progress_dict["done"] = True
                         
                         if res_msg:
                             logger.info(f"Aiogram upload SUCCESS for Ep {seq}")
@@ -1342,15 +1371,14 @@ async def handle_messages(client, message):
                             successful_uploads += 1
                             pipeline_state["uploaded"] += 1
                         else:
-                            logger.error(f"Upload PERMANENTLY FAILED for Ep {seq}")
+                            logger.error(f"Aiogram upload PERMANENTLY FAILED for Ep {seq}")
                             upload_failed_eps.append(seq)
                             pipeline_state["failed"] += 1
-                            # Send error message for failed upload (fire-and-forget)
+                            # Send error message for failed upload
                             ep_title = episode_titles.get(seq, f"Ep {seq}")
-                            async def _send_up_error(t=ep_title):
-                                try: await client.send_message(t_chat_id, f"Error...\n\n{t}")
-                                except: pass
-                            asyncio.create_task(_send_up_error())
+                            try:
+                                await client.send_message(t_chat_id, f"Error...\n\n{ep_title}")
+                            except: pass
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
                                     
@@ -1358,14 +1386,10 @@ async def handle_messages(client, message):
                         logger.error(f"Critical error in uploader Ep {seq}: {e}")
                         pipeline_state["failed"] += 1
                     finally:
-                        # Delete message in background (don't block next episode)
-                        async def _cleanup_msg(s=seq):
-                            if s in msg_objs:
-                                try: await msg_objs[s].delete()
-                                except: pass
-                                try: del msg_objs[s]
-                                except: pass
-                        asyncio.create_task(_cleanup_msg())
+                        if seq in msg_objs:
+                            try: await msg_objs[seq].delete()
+                            except: pass
+                            del msg_objs[seq]
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
@@ -1407,6 +1431,7 @@ async def handle_messages(client, message):
                             pass
 
                 async def download_complete_callback(seq, filepath, duration):
+                    download_progress_dict.pop(seq, None)
                     await upload_queue.put((seq, filepath, duration))
                     pipeline_state["downloaded"] += 1
 
@@ -1415,22 +1440,40 @@ async def handle_messages(client, message):
                     discovered_episodes.add(seq)
                     pipeline_state["discovered"] += 1
                     
-                async def start_download_callback(seq, title):
+                download_progress_dict = {}
+                
+                async def start_download_callback(seq, title, m4a_path=None, estimated_total=0):
                     await episode_lock.acquire()
                     locked_episodes.add(seq)
+                    
                     import re
                     clean_title = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', title, flags=re.IGNORECASE).strip()
                     clean_title = re.sub(r'^\d+[\s\-.:,]+', '', clean_title).strip()
                     display_title = f"Ep {seq} - {clean_title}" if clean_title else f"Ep {seq}"
                     episode_titles[seq] = display_title
-                    # Send message in background (don't block download)
-                    async def _send_dl_msg(s=seq, dt=display_title):
+                    
+                    async def monitor_download():
                         try:
-                            msg = await client.send_message(t_chat_id, f"Downloading...\n\n{dt}")
-                            msg_objs[s] = msg
+                            tot_mb = estimated_total / (1024 * 1024) if estimated_total else 0
+                            msg = await client.send_message(t_chat_id, f"Downloading...\n0.00 MB / {tot_mb:.2f} MB\n\n{display_title}")
+                            msg_objs[seq] = msg
                         except Exception as e:
-                            logger.error(f"Failed to send start msg for Ep {s}: {e}")
-                    asyncio.create_task(_send_dl_msg())
+                            logger.error(f"Failed to send start msg for Ep {seq}: {e}")
+                            return
+                        
+                        last_time = time.time()
+                        download_progress_dict[seq] = True
+                        while seq in download_progress_dict and seq in msg_objs:
+                            now = time.time()
+                            if now - last_time >= 3:
+                                last_time = now
+                                curr = os.path.getsize(m4a_path) if m4a_path and os.path.exists(m4a_path) else 0
+                                curr_mb = curr / (1024 * 1024)
+                                try: await msg_objs[seq].edit(f"Downloading...\n{curr_mb:.2f} MB / {tot_mb:.2f} MB\n\n{display_title}")
+                                except: pass
+                            await asyncio.sleep(1)
+                    
+                    asyncio.create_task(monitor_download())
 
                 up_task = asyncio.create_task(upload_worker())
 
@@ -1682,7 +1725,6 @@ async def delsave_callback(client, callback_query):
 
 async def main():
     await app.start()
-    await tele_client.start(bot_token=Config.BOT_TOKEN)
     logger.info("Bots started!")
     
     restart_msg = None
@@ -1768,7 +1810,6 @@ async def main():
     asyncio.create_task(check_expired_task())
     await idle()
     await app.stop()
-    await tele_client.disconnect()
     await aio_bot.session.close()
 
 if __name__ == "__main__":
