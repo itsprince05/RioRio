@@ -245,8 +245,7 @@ async def fast_upload(chat_id, filepath, title, artist, duration, thumb_path=Non
     data.add_field('title', title)
     data.add_field('performer', artist)
     data.add_field('duration', str(duration))
-    data.add_field('caption', f"<b>{html.escape(title)}</b>")
-    data.add_field('parse_mode', 'HTML')
+    data.add_field('caption', title)
     
     audio_file = open(filepath, 'rb')
     data.add_field('audio', audio_file, filename=os.path.basename(filepath))
@@ -1237,6 +1236,9 @@ async def handle_messages(client, message):
                 cancel_flags[uid] = False
                 discovered_episodes = set()
                 successful_uploads = 0
+                download_failed_eps = []
+                upload_failed_eps = []
+                episode_titles = {}
                 thumb_path = os.path.join(THUMB_DIR, f"{uid}.jpg")
                 thumb = thumb_path if os.path.exists(thumb_path) else None
                 artist_path = os.path.join(ARTIST_DIR, f"{uid}.txt")
@@ -1255,7 +1257,13 @@ async def handle_messages(client, message):
                     
                     if not filepath:
                         logger.error(f"Download failed upstream for Ep {seq}")
+                        download_failed_eps.append(seq)
                         pipeline_state["failed"] += 1
+                        # Send error message for failed download
+                        ep_title = episode_titles.get(seq, f"Ep {seq}")
+                        try:
+                            await client.send_message(t_chat_id, f"Error...\n\n{ep_title}")
+                        except: pass
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
@@ -1326,7 +1334,13 @@ async def handle_messages(client, message):
                             pipeline_state["uploaded"] += 1
                         else:
                             logger.error(f"Aiogram upload PERMANENTLY FAILED for Ep {seq}")
+                            upload_failed_eps.append(seq)
                             pipeline_state["failed"] += 1
+                            # Send error message for failed upload
+                            ep_title = episode_titles.get(seq, f"Ep {seq}")
+                            try:
+                                await client.send_message(t_chat_id, f"Error...\n\n{ep_title}")
+                            except: pass
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
                                     
@@ -1395,6 +1409,7 @@ async def handle_messages(client, message):
                         clean_title = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', title, flags=re.IGNORECASE).strip()
                         clean_title = re.sub(r'^\d+[\s\-.:,]+', '', clean_title).strip()
                         display_title = f"Ep {seq} - {clean_title}" if clean_title else f"Ep {seq}"
+                        episode_titles[seq] = display_title
                         msg = await client.send_message(t_chat_id, f"Downloading...\n\n{display_title}")
                         msg_objs[seq] = msg
                     except Exception as e:
@@ -1437,13 +1452,31 @@ async def handle_messages(client, message):
                             user_queues[uid].clear()
                         await t_msg.reply("Process stopped and waiting list is cleared...")
                         break
-                    elif successful_uploads > 0:
+                    elif successful_uploads > 0 or download_failed_eps or upload_failed_eps:
+                        total_requested = len(t_episodes)
+                        dl_success = total_requested - len(download_failed_eps)
+                        dl_failed = len(download_failed_eps)
+                        up_success = successful_uploads
+                        up_failed = len(upload_failed_eps)
+                        
+                        summary = f"Task Completed...\n\nTotal - {total_requested}\n\n"
+                        if dl_failed > 0:
+                            failed_list = ', '.join(str(e) for e in sorted(download_failed_eps))
+                            summary += f"Downloaded - {dl_success}\nFailed - {dl_failed} ({failed_list})\n\n"
+                        else:
+                            summary += f"Downloaded - {dl_success}\nFailed - 0\n\n"
+                        if up_failed > 0:
+                            failed_list = ', '.join(str(e) for e in sorted(upload_failed_eps))
+                            summary += f"Uploaded - {up_success}\nFailed - {up_failed} ({failed_list})"
+                        else:
+                            summary += f"Uploaded - {up_success}\nFailed - 0"
+                        
                         if not user_queues.get(uid):
-                            await t_msg.reply("Task Completed...")
+                            await t_msg.reply(summary)
                             if task_counter > 1:
                                 await t_msg.reply("All Task Completed...")
                         else:
-                            await t_msg.reply("Task Completed...")
+                            await t_msg.reply(summary)
                     else:
                         error_msg = getattr(downloader, "last_download_error", None)
                         user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
