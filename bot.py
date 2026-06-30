@@ -1259,19 +1259,20 @@ async def handle_messages(client, message):
                         logger.error(f"Download failed upstream for Ep {seq}")
                         download_failed_eps.append(seq)
                         pipeline_state["failed"] += 1
-                        # Send error message for failed download
+                        # Send error message for failed download (fire-and-forget)
                         ep_title = episode_titles.get(seq, f"Ep {seq}")
-                        try:
-                            await client.send_message(t_chat_id, f"Error...\n\n{ep_title}")
-                        except: pass
+                        async def _send_dl_error(s=seq, t=ep_title):
+                            try: await client.send_message(t_chat_id, f"Error...\n\n{t}")
+                            except: pass
+                            if s in msg_objs:
+                                try: await msg_objs[s].delete()
+                                except: pass
+                                del msg_objs[s]
+                        asyncio.create_task(_send_dl_error())
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
                         semaphore.release()
-                        if seq in msg_objs:
-                            try: await msg_objs[seq].delete()
-                            except: pass
-                            del msg_objs[seq]
                         return
 
                     pipeline_state["status"] = f"Uploading Ep {seq}..."
@@ -1286,13 +1287,14 @@ async def handle_messages(client, message):
                                 with open(artist_path, "r") as f: artist_name = f.read().strip()
                             except: pass
                         
-                        logger.info(f"Aiogram Upload Start for Ep {seq}: {title}")
+                        logger.info(f"Upload Start for Ep {seq}: {title}")
                         
-                        if seq in msg_objs:
-                            try: await msg_objs[seq].edit(f"Uploading...\n\n{title}")
-                            except: pass
-                            try: await client.send_chat_action(t_chat_id, enums.ChatAction.UPLOAD_AUDIO)
-                            except: pass
+                        # Edit message in background (don't block upload)
+                        async def _edit_uploading(s=seq, t=title):
+                            if s in msg_objs:
+                                try: await msg_objs[s].edit(f"Uploading...\n\n{t}")
+                                except: pass
+                        asyncio.create_task(_edit_uploading())
                         
                         res_msg = None
                         for attempt in range(3):
@@ -1328,14 +1330,15 @@ async def handle_messages(client, message):
                             successful_uploads += 1
                             pipeline_state["uploaded"] += 1
                         else:
-                            logger.error(f"Aiogram upload PERMANENTLY FAILED for Ep {seq}")
+                            logger.error(f"Upload PERMANENTLY FAILED for Ep {seq}")
                             upload_failed_eps.append(seq)
                             pipeline_state["failed"] += 1
-                            # Send error message for failed upload
+                            # Send error message for failed upload (fire-and-forget)
                             ep_title = episode_titles.get(seq, f"Ep {seq}")
-                            try:
-                                await client.send_message(t_chat_id, f"Error...\n\n{ep_title}")
-                            except: pass
+                            async def _send_up_error(t=ep_title):
+                                try: await client.send_message(t_chat_id, f"Error...\n\n{t}")
+                                except: pass
+                            asyncio.create_task(_send_up_error())
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
                                     
@@ -1343,10 +1346,14 @@ async def handle_messages(client, message):
                         logger.error(f"Critical error in uploader Ep {seq}: {e}")
                         pipeline_state["failed"] += 1
                     finally:
-                        if seq in msg_objs:
-                            try: await msg_objs[seq].delete()
-                            except: pass
-                            del msg_objs[seq]
+                        # Delete message in background (don't block next episode)
+                        async def _cleanup_msg(s=seq):
+                            if s in msg_objs:
+                                try: await msg_objs[s].delete()
+                                except: pass
+                                try: del msg_objs[s]
+                                except: pass
+                        asyncio.create_task(_cleanup_msg())
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
@@ -1399,16 +1406,19 @@ async def handle_messages(client, message):
                 async def start_download_callback(seq, title):
                     await episode_lock.acquire()
                     locked_episodes.add(seq)
-                    try:
-                        import re
-                        clean_title = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', title, flags=re.IGNORECASE).strip()
-                        clean_title = re.sub(r'^\d+[\s\-.:,]+', '', clean_title).strip()
-                        display_title = f"Ep {seq} - {clean_title}" if clean_title else f"Ep {seq}"
-                        episode_titles[seq] = display_title
-                        msg = await client.send_message(t_chat_id, f"Downloading...\n\n{display_title}")
-                        msg_objs[seq] = msg
-                    except Exception as e:
-                        logger.error(f"Failed to send start msg for Ep {seq}: {e}")
+                    import re
+                    clean_title = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', title, flags=re.IGNORECASE).strip()
+                    clean_title = re.sub(r'^\d+[\s\-.:,]+', '', clean_title).strip()
+                    display_title = f"Ep {seq} - {clean_title}" if clean_title else f"Ep {seq}"
+                    episode_titles[seq] = display_title
+                    # Send message in background (don't block download)
+                    async def _send_dl_msg(s=seq, dt=display_title):
+                        try:
+                            msg = await client.send_message(t_chat_id, f"Downloading...\n\n{dt}")
+                            msg_objs[s] = msg
+                        except Exception as e:
+                            logger.error(f"Failed to send start msg for Ep {s}: {e}")
+                    asyncio.create_task(_send_dl_msg())
 
                 up_task = asyncio.create_task(upload_worker())
 
