@@ -1108,6 +1108,10 @@ async def handle_messages(client, message):
                 downloader.last_debug_info[show_id] = []
         return
 
+    # Handle non-numeric input when awaiting episode range
+    if chat_id in user_show and user_awaiting_range.get(chat_id) and not re.match(r'^[0-9,\- ]+$', text):
+        return await message.reply("Invalid episode number...\n\nSend episode number which you want to download...\n\nSingle 1\nMultiple 1 10")
+
     # Handle Episode Range
     if chat_id in user_show and user_awaiting_range.get(chat_id) and re.match(r'^[0-9,\- ]+$', text):
         user_awaiting_range[chat_id] = False
@@ -1132,15 +1136,6 @@ async def handle_messages(client, message):
             return await message.reply(invalid_msg)
 
         start_seq, end_seq = min(episodes), max(episodes)
-        
-        try:
-            show_info = await downloader.get_show_info(show_id, info_level=get_user_info_level(uid, show_id))
-            if show_info and 'total_episodes' in show_info:
-                if end_seq > show_info['total_episodes']:
-                    user_awaiting_range[chat_id] = True
-                    return await message.reply(invalid_msg)
-        except Exception as e:
-            logger.error(f"Error checking total episodes: {e}")
 
         is_all = user_is_all_download.pop(chat_id, False)
         
@@ -1248,13 +1243,13 @@ async def handle_messages(client, message):
                 semaphore = asyncio.Semaphore(1)
                 discovery_done_event = asyncio.Event()
                 
-                msg_objs = {}
                 locked_episodes = set()
                 episode_lock = asyncio.Lock()
                 
                 async def perform_upload(task_data):
                     nonlocal successful_uploads, successful_downloads
                     seq, filepath, duration = task_data
+                    ep_title = episode_titles.get(seq, f"Ep {seq}")
                     
                     if not filepath:
                         logger.error(f"Download failed upstream for Ep {seq}")
@@ -1264,15 +1259,8 @@ async def handle_messages(client, message):
                             episode_lock.release()
                             locked_episodes.remove(seq)
                         semaphore.release()
-                        if seq in msg_objs:
-                            try: await msg_objs[seq].delete()
-                            except: pass
-                            del msg_objs[seq]
-                        # Send download error message to user
-                        ep_title = episode_titles.get(seq, f"Ep {seq}")
-                        try:
-                            await client.send_message(t_chat_id, f"Download Error...\n\n{ep_title}")
-                        except: pass
+                        # Fire-and-forget error message
+                        asyncio.create_task(safe_send_msg(f"Download Error...\n\n{ep_title}"))
                         return
 
                     successful_downloads += 1
@@ -1290,15 +1278,18 @@ async def handle_messages(client, message):
                         
                         logger.info(f"Aiogram Upload Start for Ep {seq}: {title}")
                         
-                        if seq in msg_objs:
-                            try: await msg_objs[seq].edit(f"Uploading...\n\n{title}")
-                            except: pass
-                            try: await client.send_chat_action(t_chat_id, enums.ChatAction.UPLOAD_AUDIO)
-                            except: pass
+                        # Fire-and-forget status message (don't block upload)
+                        asyncio.create_task(safe_send_msg(f"Uploading...\n\n{ep_title}"))
                         
+                        # Start upload IMMEDIATELY
                         res_msg = None
-                        for attempt in range(3):
+                        for attempt in range(5):
                             if cancel_flags.get(uid): break
+                            
+                            # Send retry notification (from 2nd attempt onwards)
+                            if attempt > 0:
+                                asyncio.create_task(safe_send_msg(f"Uploading...\nTrying {attempt + 1}\n\n{ep_title}"))
+                            
                             try:
                                 file_size = os.path.getsize(filepath) if os.path.exists(filepath) else 0
                                 if file_size > 49 * 1024 * 1024:
@@ -1338,11 +1329,8 @@ async def handle_messages(client, message):
                             logger.error(f"Aiogram upload PERMANENTLY FAILED for Ep {seq}")
                             pipeline_state["failed"] += 1
                             upload_failed_eps.append(seq)
-                            # Send upload error message to user
-                            ep_title = episode_titles.get(seq, f"Ep {seq}")
-                            try:
-                                await client.send_message(t_chat_id, f"Upload Error...\n\n{ep_title}")
-                            except: pass
+                            # Fire-and-forget upload error message
+                            asyncio.create_task(safe_send_msg(f"Upload Error...\n\n{ep_title}"))
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
                                     
@@ -1350,10 +1338,6 @@ async def handle_messages(client, message):
                         logger.error(f"Critical error in uploader Ep {seq}: {e}")
                         pipeline_state["failed"] += 1
                     finally:
-                        if seq in msg_objs:
-                            try: await msg_objs[seq].delete()
-                            except: pass
-                            del msg_objs[seq]
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
@@ -1403,19 +1387,35 @@ async def handle_messages(client, message):
                     discovered_episodes.add(seq)
                     pipeline_state["discovered"] += 1
                     
+                async def safe_send_msg(text):
+                    """Fire-and-forget message sender that never blocks the pipeline"""
+                    try:
+                        await client.send_message(t_chat_id, text)
+                    except Exception:
+                        pass
+
                 async def start_download_callback(seq, title):
                     await episode_lock.acquire()
                     locked_episodes.add(seq)
+                    # Just store the title — no message, no delay
                     try:
                         import re
                         clean_title = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', title, flags=re.IGNORECASE).strip()
                         clean_title = re.sub(r'^\d+[\s\-.:,]+', '', clean_title).strip()
                         display_title = f"Ep {seq} - {clean_title}" if clean_title else f"Ep {seq}"
                         episode_titles[seq] = display_title
-                        msg = await client.send_message(t_chat_id, f"Downloading...\n\n{display_title}")
-                        msg_objs[seq] = msg
                     except Exception as e:
-                        logger.error(f"Failed to send start msg for Ep {seq}: {e}")
+                        episode_titles[seq] = f"Ep {seq}"
+                        logger.error(f"Failed to process title for Ep {seq}: {e}")
+
+                async def download_retry_callback(seq, attempt_num):
+                    """Called when download retries — sends retry notification"""
+                    ep_title = episode_titles.get(seq, f"Ep {seq}")
+                    asyncio.create_task(safe_send_msg(f"Downloading...\nTrying {attempt_num}\n\n{ep_title}"))
+
+                async def not_found_callback(seq):
+                    """Called when an episode is not found in the API after retries"""
+                    asyncio.create_task(safe_send_msg(f"Episode {seq} not found..."))
 
                 up_task = asyncio.create_task(upload_worker())
 
@@ -1425,12 +1425,13 @@ async def handle_messages(client, message):
                     if uid not in user_processes:
                         user_processes[uid] = []
                     user_dl_dir = os.path.join(Config.DOWNLOAD_DIR, str(uid))
-                    await downloader.download_episodes(
+                    dl_result = await downloader.download_episodes(
                         t_show_id, min(t_episodes), max(t_episodes), user_dl_dir,
                         progress_callback=discovery_callback, cancel_flag=lambda: cancel_flags.get(uid),
                         on_complete=download_complete_callback, on_start=start_download_callback,
-                        discovery_done=discovery_done_event, info_level='full',
-                        process_tracker=user_processes[uid]
+                        discovery_done=discovery_done_event, info_level=get_user_info_level(uid, t_show_id),
+                        process_tracker=user_processes[uid], on_not_found=not_found_callback,
+                        on_retry=download_retry_callback
                     )
                     
                     await upload_queue.put(None)
@@ -1454,6 +1455,8 @@ async def handle_messages(client, message):
                             user_queues[uid].clear()
                         await t_msg.reply("Process stopped and waiting list is cleared...")
                         break
+                    elif dl_result and dl_result.get("abort_reason") == "many_not_found":
+                        await t_msg.reply("Many episodes are not found for this show, check your episode number and try again...")
                     elif successful_uploads > 0 or successful_downloads > 0:
                         # Build detailed task summary
                         total_requested = len(t_episodes)
