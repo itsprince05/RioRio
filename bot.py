@@ -1411,7 +1411,7 @@ async def handle_messages(client, message):
                         t_show_id, min(t_episodes), max(t_episodes), user_dl_dir,
                         progress_callback=discovery_callback, cancel_flag=lambda: cancel_flags.get(uid),
                         on_complete=download_complete_callback, on_start=start_download_callback,
-                        discovery_done=discovery_done_event, info_level='full',
+                        discovery_done=discovery_done_event, info_level=get_user_info_level(uid, t_show_id),
                         process_tracker=user_processes[uid]
                     )
                     
