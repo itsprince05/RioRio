@@ -379,6 +379,7 @@ class PFMDownloader:
                     
                     mpd = ep[1]
                     duration = ep[3] if len(ep) > 3 else 0
+                    video_url = ep[4] if len(ep) > 4 else ""
                     
                     clean_name = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', name, flags=re.IGNORECASE).strip()
                     clean_name = re.sub(r'^\d+[\s\-.:,]+', '', clean_name).strip()
@@ -412,24 +413,18 @@ class PFMDownloader:
                         files.append((seq_num, m4a, dur))
                     else:
                         download_success = False
-                        # Try each quality
-                        for q in qualities:
-                            if download_success: break
-                            link = mpd.rsplit("/", 1)[0] + f"/protected_audio_mpd_{q}k.mp4"
-                            
-                            for attempt in range(3): # 3 attempts per quality
+                        
+                        # --- Priority 1: Try Type 2 (video MPD audio, no DRM) ---
+                        if video_url:
+                            audio_url = video_url.rsplit("/", 1)[0] + "/audio.mp4"
+                            logger.info(f"Trying Type 2 (video audio) for Ep.{seq_num}: {audio_url}")
+                            for attempt in range(3):
                                 if cancel_flag and cancel_flag(): break
                                 try:
-                                    _, key = await self.get_keys(mpd, show_id)
-                                    if not key: 
-                                        logger.warning(f"No key for Ep.{seq_num} (Attempt {attempt+1})")
-                                        await asyncio.sleep(2)
-                                        continue
-
                                     proc = await asyncio.create_subprocess_exec(
                                         "ffmpeg", "-y", "-loglevel", "error",
-                                        "-decryption_key", key, "-i", link,
-                                        "-map", "0:a:0", "-vn", "-c:a", "copy", m4a
+                                        "-i", audio_url,
+                                        "-c:a", "copy", m4a
                                     )
                                     self.current_processes.append(proc)
                                     if process_tracker is not None:
@@ -444,7 +439,7 @@ class PFMDownloader:
                                             self.current_processes.remove(proc)
                                         if process_tracker is not None and proc in process_tracker:
                                             process_tracker.remove(proc)
-
+                                    
                                     if os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
                                         dur = 0
                                         try:
@@ -462,15 +457,72 @@ class PFMDownloader:
                                             await on_complete(seq_num, m4a, dur)
                                         files.append((seq_num, m4a, dur))
                                         download_success = True
-                                        logger.info(f"Success Ep.{seq_num} at {q}k")
+                                        logger.info(f"Type 2 Success Ep.{seq_num}")
                                         break
                                 except Exception as e:
-                                    self.last_download_error = str(e)
-                                    logger.error(f"Worker Error Ep.{seq_num} (Quality {q}k, Attempt {attempt+1}): {e}")
+                                    logger.error(f"Type 2 Error Ep.{seq_num} (Attempt {attempt+1}): {e}")
                                 await asyncio.sleep(1)
                         
+                        # --- Priority 2: Fallback to Type 1 (DRM encrypted) ---
                         if not download_success:
-                            logger.error(f"FAILED Ep.{seq_num} after all qualities and retries.")
+                            for q in qualities:
+                                if download_success: break
+                                link = mpd.rsplit("/", 1)[0] + f"/protected_audio_mpd_{q}k.mp4"
+                                
+                                for attempt in range(3): # 3 attempts per quality
+                                    if cancel_flag and cancel_flag(): break
+                                    try:
+                                        _, key = await self.get_keys(mpd, show_id)
+                                        if not key: 
+                                            logger.warning(f"No key for Ep.{seq_num} (Attempt {attempt+1})")
+                                            await asyncio.sleep(2)
+                                            continue
+
+                                        proc = await asyncio.create_subprocess_exec(
+                                            "ffmpeg", "-y", "-loglevel", "error",
+                                            "-decryption_key", key, "-i", link,
+                                            "-map", "0:a:0", "-vn", "-c:a", "copy", m4a
+                                        )
+                                        self.current_processes.append(proc)
+                                        if process_tracker is not None:
+                                            process_tracker.append(proc)
+                                        try:
+                                            await asyncio.wait_for(proc.wait(), timeout=300)
+                                        except:
+                                            try: proc.kill(); await proc.wait()
+                                            except: pass
+                                        finally:
+                                            if proc in self.current_processes:
+                                                self.current_processes.remove(proc)
+                                            if process_tracker is not None and proc in process_tracker:
+                                                process_tracker.remove(proc)
+
+                                        if os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
+                                            dur = 0
+                                            try:
+                                                pr = await asyncio.create_subprocess_exec(
+                                                    "ffprobe", "-v", "error", "-show_entries", "format=duration",
+                                                    "-of", "default=noprint_wrappers=1:nokey=1", m4a,
+                                                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+                                                )
+                                                out, _ = await pr.communicate()
+                                                dur = int(float(out.decode().strip()))
+                                            except:
+                                                dur = int(duration) if duration else 0
+                                            
+                                            if on_complete:
+                                                await on_complete(seq_num, m4a, dur)
+                                            files.append((seq_num, m4a, dur))
+                                            download_success = True
+                                            logger.info(f"Type 1 Success Ep.{seq_num} at {q}k")
+                                            break
+                                    except Exception as e:
+                                        self.last_download_error = str(e)
+                                        logger.error(f"Type 1 Error Ep.{seq_num} (Quality {q}k, Attempt {attempt+1}): {e}")
+                                    await asyncio.sleep(1)
+                        
+                        if not download_success:
+                            logger.error(f"FAILED Ep.{seq_num} after all methods and retries.")
                             if on_complete:
                                 await on_complete(seq_num, None, 0)
                 finally:
@@ -526,7 +578,11 @@ class PFMDownloader:
                     mapping[i.get('seq_number')] = s
                     media = i.get("media_url_enc", "")
                     if media:
-                        info = (i.get("story_title"), media, s, i.get("duration"))
+                        video_url = ""
+                        video_info = i.get("video_info", {})
+                        if video_info:
+                            video_url = video_info.get("android", {}).get("video_url", "")
+                        info = (i.get("story_title"), media, s, i.get("duration"), video_url)
                         await queue.put((s, info))
                         processed_metadata.add(s)
                         if progress_callback:
@@ -550,7 +606,7 @@ class PFMDownloader:
                     if s and s not in processed_metadata:
                         media = i.get("media_url_enc", "")
                         if media:
-                            info = (i.get("story_title"), media, s, i.get("duration"))
+                            info = (i.get("story_title"), media, s, i.get("duration"), "")
                             await queue.put((s, info))
                             processed_metadata.add(s)
                             if progress_callback:
@@ -574,7 +630,7 @@ class PFMDownloader:
                         if s and s not in processed_metadata:
                             media = i.get("media_url_enc", "")
                             if media:
-                                info = (i.get("story_title"), media, s, i.get("duration"))
+                                info = (i.get("story_title"), media, s, i.get("duration"), "")
                                 await queue.put((s, info))
                                 processed_metadata.add(s)
                                 if progress_callback:
@@ -617,7 +673,11 @@ class PFMDownloader:
                                         media = si.get("media_url_enc", "")
                                         break
                             if media:
-                                info = (i.get("story_title"), media, s, i.get("duration"))
+                                video_url = ""
+                                video_info = i.get("video_info", {})
+                                if video_info:
+                                    video_url = video_info.get("android", {}).get("video_url", "")
+                                info = (i.get("story_title"), media, s, i.get("duration"), video_url)
                                 await queue.put((s, info))
                                 processed_metadata.add(s)
                                 if progress_callback:
