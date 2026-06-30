@@ -236,7 +236,9 @@ async def send_log(log_ch_key, text, photo=None):
 
 
 
-class UploadProgressReader:
+import io
+
+class UploadProgressReader(io.IOBase):
     def __init__(self, filename, progress_callback=None):
         self.f = open(filename, 'rb')
         self.total = os.path.getsize(filename)
@@ -248,8 +250,16 @@ class UploadProgressReader:
         if self.progress_callback:
             self.progress_callback(self.current, self.total)
         return data
+    def tell(self):
+        return self.f.tell()
+    def seek(self, offset, whence=io.SEEK_SET):
+        res = self.f.seek(offset, whence)
+        self.current = self.f.tell()
+        return res
     def close(self):
         self.f.close()
+    def fileno(self):
+        return self.f.fileno()
     def __len__(self):
         return self.total
 
@@ -1279,7 +1289,7 @@ async def handle_messages(client, message):
                         # Send error message for failed download
                         ep_title = episode_titles.get(seq, f"Ep {seq}")
                         try:
-                            await client.send_message(t_chat_id, f"Error...\n\n{ep_title}")
+                            await client.send_message(t_chat_id, f"Download Error...\n\n{ep_title}")
                         except: pass
                         if seq in locked_episodes:
                             episode_lock.release()
@@ -1377,7 +1387,7 @@ async def handle_messages(client, message):
                             # Send error message for failed upload
                             ep_title = episode_titles.get(seq, f"Ep {seq}")
                             try:
-                                await client.send_message(t_chat_id, f"Error...\n\n{ep_title}")
+                                await client.send_message(t_chat_id, f"Upload Error...\n\n{ep_title}")
                             except: pass
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
