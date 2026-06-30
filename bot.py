@@ -151,7 +151,6 @@ user_queues = {}
 cancel_flags = {}
 gen_state = {}
 user_processes = {}  # Per-user process tracking for cancel
-user_up_tasks = {}   # Per-user upload task tracking for cancel
 expired_notified = set()
 
 
@@ -932,20 +931,10 @@ async def cancel_cmd(client, message):
             user_processes[uid] = []
         except Exception as e:
             logger.error(f"Error killing processes: {e}")
-            
-        # Cancel stuck upload tasks
-        try:
-            tasks = user_up_tasks.get(uid, [])
-            for t in tasks:
-                if not t.done():
-                    t.cancel()
-            user_up_tasks[uid] = []
-        except Exception as e:
-            logger.error(f"Error cancelling upload tasks: {e}")
 
-        # Clear user's waiting queue and force-clean state so they aren't stuck
-        user_queues.pop(uid, None)
-        active_downloads.pop(uid, None)
+        # Clear user's waiting queue
+        if uid in user_queues:
+            user_queues[uid].clear()
         
         await message.reply("Stopping process...")
     else:
@@ -954,7 +943,6 @@ async def cancel_cmd(client, message):
         user_queues.pop(uid, None)
         cancel_flags.pop(uid, None)
         user_processes.pop(uid, None)
-        user_up_tasks.pop(uid, None)
         await message.reply("No running task...")
 
 
@@ -1430,9 +1418,6 @@ async def handle_messages(client, message):
                         logger.error(f"Failed to send start msg for Ep {seq}: {e}")
 
                 up_task = asyncio.create_task(upload_worker())
-                if uid not in user_up_tasks:
-                    user_up_tasks[uid] = []
-                user_up_tasks[uid].append(up_task)
 
                 try:
                     pipeline_state["status"] = "Downloading episodes..."
@@ -1541,7 +1526,6 @@ async def handle_messages(client, message):
                 active_downloads.pop(chat_id, None)
             cancel_flags.pop(uid, None)
             user_processes.pop(uid, None)
-            user_up_tasks.pop(uid, None)
             user_queues.pop(uid, None)
             logger.info(f"Cleanup complete for user {uid}")
     elif len(text) >= 3 and not text.startswith('/'):
