@@ -1270,13 +1270,10 @@ async def handle_messages(client, message):
                 thumb = thumb_path if os.path.exists(thumb_path) else None
                 artist_path = os.path.join(ARTIST_DIR, f"{uid}.txt")
 
-                upload_queue = asyncio.Queue(maxsize=1)
-                semaphore = asyncio.Semaphore(1)
+                upload_queue = asyncio.Queue(maxsize=10)
                 discovery_done_event = asyncio.Event()
                 
                 msg_objs = {}
-                locked_episodes = set()
-                episode_lock = asyncio.Lock()
                 
                 async def perform_upload(task_data):
                     nonlocal successful_uploads
@@ -1288,17 +1285,12 @@ async def handle_messages(client, message):
                         pipeline_state["failed"] += 1
                         # Send error message for failed download
                         ep_title = episode_titles.get(seq, f"Ep {seq}")
-                        try:
-                            await client.send_message(t_chat_id, f"Download Error...\n\n{ep_title}")
-                        except: pass
-                        if seq in locked_episodes:
-                            episode_lock.release()
-                            locked_episodes.remove(seq)
-                        semaphore.release()
+                        asyncio.create_task(client.send_message(t_chat_id, f"Download Error...\n\n{ep_title}"))
+                        
                         if seq in msg_objs:
-                            try: await msg_objs[seq].delete()
-                            except: pass
-                            del msg_objs[seq]
+                            msg_to_del = msg_objs.pop(seq, None)
+                            if msg_to_del:
+                                asyncio.create_task(msg_to_del.delete())
                         return
 
                     pipeline_state["status"] = f"Uploading Ep {seq}..."
@@ -1386,9 +1378,7 @@ async def handle_messages(client, message):
                             pipeline_state["failed"] += 1
                             # Send error message for failed upload
                             ep_title = episode_titles.get(seq, f"Ep {seq}")
-                            try:
-                                await client.send_message(t_chat_id, f"Upload Error...\n\n{ep_title}")
-                            except: pass
+                            asyncio.create_task(client.send_message(t_chat_id, f"Upload Error...\n\n{ep_title}"))
                         
                         if upload_gap > 0: await asyncio.sleep(upload_gap)
                                     
@@ -1397,13 +1387,9 @@ async def handle_messages(client, message):
                         pipeline_state["failed"] += 1
                     finally:
                         if seq in msg_objs:
-                            try: await msg_objs[seq].delete()
-                            except: pass
-                            del msg_objs[seq]
-                        if seq in locked_episodes:
-                            episode_lock.release()
-                            locked_episodes.remove(seq)
-                        semaphore.release()
+                            msg_to_del = msg_objs.pop(seq, None)
+                            if msg_to_del:
+                                asyncio.create_task(msg_to_del.delete())
 
                 async def upload_worker():
                     upload_buffer = {}
@@ -1446,16 +1432,12 @@ async def handle_messages(client, message):
                     pipeline_state["downloaded"] += 1
 
                 async def discovery_callback(seq):
-                    await semaphore.acquire()
                     discovered_episodes.add(seq)
                     pipeline_state["discovered"] += 1
                     
                 download_progress_dict = {}
                 
                 async def start_download_callback(seq, title, m4a_path=None, estimated_total=0):
-                    await episode_lock.acquire()
-                    locked_episodes.add(seq)
-                    
                     import re
                     clean_title = re.sub(r'^(?:(?:Ep|Episode|E|Ch|Chapter|C)[\s\-.:,]*\d+[\s\-.:,]*)+', '', title, flags=re.IGNORECASE).strip()
                     clean_title = re.sub(r'^\d+[\s\-.:,]+', '', clean_title).strip()
