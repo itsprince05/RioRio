@@ -483,22 +483,42 @@ class PFMDownloader:
         self.current_show_title = "PocketFM"
         current_seq = seq
         processed_metadata = set()
+        consecutive_empty = 0
+        api_retries = {}
 
         while current_seq <= end:
             if cancel_flag and cancel_flag(): break
             
             story_data = await self.get_detail(show_id, current_seq, info_level=info_level)
             if not story_data or story_data.get("status") != 1:
+                # Retry same position up to 3 times before skipping
+                retries = api_retries.get(current_seq, 0)
+                if retries < 3:
+                    api_retries[current_seq] = retries + 1
+                    logger.warning(f"API fail at ptr {current_seq}, retry {retries + 1}/3")
+                    await asyncio.sleep(2 * (retries + 1))
+                    continue
+                logger.error(f"API failed at ptr {current_seq} after 3 retries, advancing by 1")
                 current_seq += 1
                 continue
             
             result = story_data.get("result", {})
             self.current_show_title = result.get("show_title", self.current_show_title)
             stories = result.get("stories", [])
-            if not stories: break
+            if not stories:
+                consecutive_empty += 1
+                if consecutive_empty >= 5:
+                    logger.info(f"5 consecutive empty responses at ptr {current_seq}, ending discovery")
+                    break
+                logger.warning(f"Empty stories at ptr {current_seq}, consecutive={consecutive_empty}, continuing...")
+                current_seq += 1
+                continue
+            
+            consecutive_empty = 0
             
             mapping = {}
             to_sub_count = 0
+            unsub_episodes = []
             
             for i in stories:
                 s = i.get("natural_sequence_number", 0)
@@ -517,9 +537,11 @@ class PFMDownloader:
                     else:
                         self.story_meta = [i.get('created_by'), show_id, i.get('story_id')]
                         await self.add_story('subscribe_story')
+                        unsub_episodes.append(i)
                         to_sub_count += 1
             
             if to_sub_count > 0:
+                # First attempt to get subscribed stories
                 await asyncio.sleep(2)
                 saved_data = await self.get_story(show_id)
                 saved_stories = (saved_data.get("result", {}) if saved_data else {}).get("stories", [])
@@ -536,24 +558,106 @@ class PFMDownloader:
                                     if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
                                     else: progress_callback(s)
                                 except: pass
+                
+                # Second attempt for any still-missing subscription episodes
+                still_missing = [ep for ep in unsub_episodes if mapping.get(ep.get('seq_number')) not in processed_metadata]
+                if still_missing:
+                    logger.info(f"Retrying {len(still_missing)} subscription episodes...")
+                    for ep in still_missing:
+                        self.story_meta = [ep.get('created_by'), show_id, ep.get('story_id')]
+                        await self.add_story('subscribe_story')
+                    await asyncio.sleep(3)
+                    saved_data2 = await self.get_story(show_id)
+                    saved_stories2 = (saved_data2.get("result", {}) if saved_data2 else {}).get("stories", [])
+                    for i in saved_stories2:
+                        s = mapping.get(i.get('seq_number'))
+                        if s and s not in processed_metadata:
+                            media = i.get("media_url_enc", "")
+                            if media:
+                                info = (i.get("story_title"), media, s, i.get("duration"))
+                                await queue.put((s, info))
+                                processed_metadata.add(s)
+                                if progress_callback:
+                                    try:
+                                        if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
+                                        else: progress_callback(s)
+                                    except: pass
             
             for mapped_seq, mapped_s in mapping.items():
                 if mapped_s not in processed_metadata:
-                    logger.warning(f"Metadata permanently missing for Ep.{mapped_s}. Skipping...")
-                    processed_metadata.add(mapped_s)
-                    if progress_callback:
-                        try:
-                            if asyncio.iscoroutinefunction(progress_callback): await progress_callback(mapped_s)
-                            else: progress_callback(mapped_s)
-                        except: pass
-                    if on_complete:
-                        try:
-                            if asyncio.iscoroutinefunction(on_complete): await on_complete(mapped_s, None, 0)
-                            else: on_complete(mapped_s, None, 0)
-                        except: pass
+                    logger.warning(f"Metadata missing for Ep.{mapped_s} after retries. Marking for final sweep.")
 
             # Safe increment to cover all indices even if sequence numbers have gaps
             current_seq += len(stories)
+        
+        # --- Final sweep: retry any episodes that were missed ---
+        missed_episodes = [s for s in range(seq, end + 1) if s not in processed_metadata]
+        if missed_episodes and not (cancel_flag and cancel_flag()):
+            logger.info(f"Final sweep: {len(missed_episodes)} episodes missed, retrying individually...")
+            for missed_seq in missed_episodes:
+                if cancel_flag and cancel_flag(): break
+                try:
+                    retry_data = await self.get_detail(show_id, missed_seq, info_level=info_level)
+                    if not retry_data or retry_data.get("status") != 1:
+                        continue
+                    retry_result = retry_data.get("result", {})
+                    retry_stories = retry_result.get("stories", [])
+                    for i in retry_stories:
+                        s = i.get("natural_sequence_number", 0)
+                        if s == missed_seq and s not in processed_metadata:
+                            media = i.get("media_url_enc", "")
+                            if not media:
+                                self.story_meta = [i.get('created_by'), show_id, i.get('story_id')]
+                                await self.add_story('subscribe_story')
+                                await asyncio.sleep(1)
+                                sd = await self.get_story(show_id)
+                                ss = (sd.get("result", {}) if sd else {}).get("stories", [])
+                                for si in ss:
+                                    if mapping.get(si.get('seq_number')) == s or si.get('seq_number') == i.get('seq_number'):
+                                        media = si.get("media_url_enc", "")
+                                        break
+                            if media:
+                                info = (i.get("story_title"), media, s, i.get("duration"))
+                                await queue.put((s, info))
+                                processed_metadata.add(s)
+                                if progress_callback:
+                                    try:
+                                        if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
+                                        else: progress_callback(s)
+                                    except: pass
+                                logger.info(f"Final sweep recovered Ep.{s}")
+                            else:
+                                logger.warning(f"Final sweep: Ep.{s} still has no media, skipping")
+                                processed_metadata.add(s)
+                                if progress_callback:
+                                    try:
+                                        if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
+                                        else: progress_callback(s)
+                                    except: pass
+                                if on_complete:
+                                    try:
+                                        if asyncio.iscoroutinefunction(on_complete): await on_complete(s, None, 0)
+                                        else: on_complete(s, None, 0)
+                                    except: pass
+                            break
+                except Exception as e:
+                    logger.error(f"Final sweep error for Ep.{missed_seq}: {e}")
+            
+            still_missed = [s for s in range(seq, end + 1) if s not in processed_metadata]
+            if still_missed:
+                logger.warning(f"After final sweep, {len(still_missed)} episodes still missing: {still_missed[:20]}...")
+                for s in still_missed:
+                    processed_metadata.add(s)
+                    if progress_callback:
+                        try:
+                            if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
+                            else: progress_callback(s)
+                        except: pass
+                    if on_complete:
+                        try:
+                            if asyncio.iscoroutinefunction(on_complete): await on_complete(s, None, 0)
+                            else: on_complete(s, None, 0)
+                        except: pass
 
         # Signal that metadata discovery is complete
         if discovery_done:
