@@ -237,9 +237,56 @@ async def send_log(log_ch_key, text, photo=None):
 
 
 async def fast_upload(chat_id, filepath, title, artist, duration, thumb_path=None):
-    """Upload using direct Bot API for faster speeds"""
-    url = f"https://api.telegram.org/bot{Config.BOT_TOKEN}/sendAudio"
+    """Upload using Local Bot API Server for instant speed, fallback to Pyrogram/Public API"""
+    local_server = "http://telegram-bot-api:8081" if os.getenv("DOCKER_ENV") else "http://127.0.0.1:8081"
     
+    # Quick check if local API is alive
+    use_local = False
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f"{local_server}/", timeout=0.5) as resp:
+                use_local = True
+    except:
+        use_local = False
+
+    if use_local:
+        # Use Local Server + Local File Path (ZERO UPLOAD TIME!)
+        url = f"{local_server}/bot{Config.BOT_TOKEN}/sendAudio"
+        data = aiohttp.FormData()
+        data.add_field('chat_id', str(chat_id))
+        data.add_field('title', title)
+        data.add_field('performer', artist)
+        data.add_field('duration', str(duration))
+        data.add_field('caption', title)
+        
+        # Local API server can read directly from shared volume!
+        # Need to convert Windows path to Docker path if running locally but server is in Docker
+        docker_filepath = filepath.replace('\\', '/')
+        if "downloads" in docker_filepath:
+            docker_filepath = "/app/downloads/" + docker_filepath.split("downloads/")[-1]
+            
+        data.add_field('audio', f"file://{docker_filepath}")
+        
+        if thumb_path and os.path.exists(thumb_path):
+            docker_thumb = thumb_path.replace('\\', '/')
+            if "avatars" in docker_thumb:
+                docker_thumb = "/app/avatars/" + docker_thumb.split("avatars/")[-1]
+            data.add_field('thumb', f"file://{docker_thumb}")
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, data=data, timeout=30) as resp:
+                    result = await resp.json()
+                    if result.get("ok"):
+                        return True
+                    elif result.get("error_code") == 429:
+                        retry_after = result.get("parameters", {}).get("retry_after", 30)
+                        raise FloodWait(retry_after)
+        except Exception as e:
+            logger.error(f"Local API upload failed: {e}")
+
+    # Fallback: public bot api proxy
+    url = f"https://api.telegram.org/bot{Config.BOT_TOKEN}/sendAudio"
     data = aiohttp.FormData()
     data.add_field('chat_id', str(chat_id))
     data.add_field('title', title)
@@ -263,6 +310,11 @@ async def fast_upload(chat_id, filepath, title, artist, duration, thumb_path=Non
                     if result.get("error_code") == 429:
                         retry_after = result.get("parameters", {}).get("retry_after", 30)
                         raise FloodWait(retry_after)
+                return result.get("ok")
+    finally:
+        audio_file.close()
+        if thumb_file:
+            thumb_file.close()
                     logger.error(f"Bot API upload failed: {result}")
                     return False
                 return True
@@ -1300,9 +1352,8 @@ async def handle_messages(client, message):
                         for attempt in range(3):
                             if cancel_flags.get(uid): break
                             try:
-                                res_msg = await app.send_audio(
-                                    t_chat_id, audio=filepath, caption=title,
-                                    title=title, performer=artist_name, duration=duration, thumb=thumb
+                                res_msg = await fast_upload(
+                                    t_chat_id, filepath, title, artist_name, duration, thumb
                                 )
                                 if res_msg: break
                             except (FloodWait) as e:
