@@ -368,12 +368,7 @@ class PFMDownloader:
                 seq_num, ep = item
                 try:
                     raw_name = ep[0].strip()
-                    if on_start:
-                        try:
-                            if asyncio.iscoroutinefunction(on_start): await on_start(seq_num, raw_name)
-                            else: on_start(seq_num, raw_name)
-                        except: pass
-                        
+                    # name and clean_name processing happens before on_start now
                     name = re.sub(r'[^\w\s\-,.\']+', '', raw_name, flags=re.UNICODE)
                     name = re.sub(r'\s+', ' ', name).strip()
                     
@@ -393,6 +388,26 @@ class PFMDownloader:
                     show_dir = os.path.join(output_dir, show_title_cleaned)
                     os.makedirs(show_dir, exist_ok=True)
                     m4a = os.path.join(show_dir, filename)
+                    
+                    estimated_total = 0
+                    if video_url:
+                        try:
+                            audio_url = video_url.rsplit("/", 1)[0] + "/audio.mp4"
+                            async with aiohttp.ClientSession() as session:
+                                async with session.head(audio_url) as resp:
+                                    if "Content-Length" in resp.headers:
+                                        estimated_total = int(resp.headers["Content-Length"])
+                        except: pass
+                    
+                    if not estimated_total:
+                        try: estimated_total = int(duration) * 192 * 1000 / 8
+                        except: pass
+
+                    if on_start:
+                        try:
+                            if asyncio.iscoroutinefunction(on_start): await on_start(seq_num, raw_name, m4a, estimated_total)
+                            else: on_start(seq_num, raw_name, m4a, estimated_total)
+                        except: pass
                     
                     if os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
                         # (Existing ffprobe logic...)
