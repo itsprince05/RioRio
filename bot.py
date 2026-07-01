@@ -931,11 +931,10 @@ async def cancel_cmd(client, message):
         except Exception as e:
             logger.error(f"Error killing processes: {e}")
 
-        # Immediately clear ALL state so user is free to start new tasks
-        # The background task will detect cancel_flag and exit on its own
+        # Immediately clear state so user is free to start new tasks
+        # Keep cancel_flags[uid] = True so background task detects it and stops
         active_downloads.pop(uid, None)
         user_queues.pop(uid, None)
-        cancel_flags.pop(uid, None)
         user_processes.pop(uid, None)
         
         await message.reply("Stopping process...")
@@ -1566,11 +1565,12 @@ async def handle_messages(client, message):
         except BaseException as e:
             logger.error(f"Task loop killed: {type(e).__name__}: {e}")
         finally:
+            # Always clean cancel_flags (cancel_cmd keeps it set for us to detect)
+            cancel_flags.pop(uid, None)
             if not _cleanup_done:
                 active_downloads.pop(uid, None)
                 if chat_id != uid:
                     active_downloads.pop(chat_id, None)
-                cancel_flags.pop(uid, None)
                 user_processes.pop(uid, None)
                 user_queues.pop(uid, None)
             logger.info(f"Cleanup complete for user {uid}")
