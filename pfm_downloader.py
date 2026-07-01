@@ -427,7 +427,7 @@ class PFMDownloader:
                             )
                             out, _ = await proc.communicate()
                             dur = int(float(out.decode().strip()))
-                        except:
+                        except Exception:
                             dur = int(duration) if duration else 0
                         
                         if on_complete:
@@ -472,9 +472,9 @@ class PFMDownloader:
                                                     process_tracker.append(proc)
                                                 try:
                                                     await asyncio.wait_for(proc.wait(), timeout=300)
-                                                except:
+                                                except Exception:
                                                     try: proc.kill(); await proc.wait()
-                                                    except: pass
+                                                    except Exception: pass
                                                 finally:
                                                     if proc in self.current_processes:
                                                         self.current_processes.remove(proc)
@@ -525,9 +525,9 @@ class PFMDownloader:
                                             process_tracker.append(proc)
                                         try:
                                             await asyncio.wait_for(proc.wait(), timeout=300)
-                                        except:
+                                        except Exception:
                                             try: proc.kill(); await proc.wait()
-                                            except: pass
+                                            except Exception: pass
                                         finally:
                                             if proc in self.current_processes:
                                                 self.current_processes.remove(proc)
@@ -544,7 +544,7 @@ class PFMDownloader:
                                                 )
                                                 out, _ = await pr.communicate()
                                                 dur = int(float(out.decode().strip()))
-                                            except:
+                                            except Exception:
                                                 dur = int(duration) if duration else 0
                                             
                                             if on_complete:
