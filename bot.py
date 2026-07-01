@@ -1414,6 +1414,8 @@ async def handle_messages(client, message):
                             pass
 
                 async def download_complete_callback(seq, filepath, duration, error_reason=None):
+                    if cancel_flags.get(uid):
+                        return
                     await upload_queue.put((seq, filepath, duration, error_reason))
                     if filepath:
                         pipeline_state["downloaded"] += 1
@@ -1453,7 +1455,12 @@ async def handle_messages(client, message):
                     except: pass
 
                 async def start_download_callback(seq, title):
+                    if cancel_flags.get(uid):
+                        raise asyncio.CancelledError()
                     await episode_lock.acquire()
+                    if cancel_flags.get(uid):
+                        episode_lock.release()
+                        raise asyncio.CancelledError()
                     locked_episodes.add(seq)
                     try:
                         import re
