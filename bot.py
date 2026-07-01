@@ -1555,6 +1555,7 @@ async def handle_messages(client, message):
                         except: pass
                         
                 except Exception as e:
+                    if 'up_task' in locals(): up_task.cancel()
                     logger.error(f"Pipeline error: {e}", exc_info=True)
                     user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
                     err_text = (
@@ -1568,6 +1569,7 @@ async def handle_messages(client, message):
                         await client.send_message(Config.ADMIN_GROUP, err_text)
                     except: pass
                 except BaseException as e:
+                    if 'up_task' in locals(): up_task.cancel()
                     # Catches CancelledError, KeyboardInterrupt, SystemExit etc.
                     logger.error(f"Pipeline killed: {type(e).__name__}: {e}")
                     user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
