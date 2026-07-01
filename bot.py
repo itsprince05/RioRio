@@ -1268,6 +1268,7 @@ async def handle_messages(client, message):
                 locked_episodes = set()
                 episode_lock = asyncio.Lock()
                 msg_objs = {}
+                msg_states = {}
                 
                 async def perform_upload(task_data):
                     nonlocal successful_uploads, successful_downloads
@@ -1308,6 +1309,7 @@ async def handle_messages(client, message):
                         
                         # Edit tracked msg to "Uploading..." (fire-and-forget)
                         asyncio.create_task(bg_edit(seq, f"Uploading...\n\n{ep_title}"))
+                        msg_states[seq] = "Uploading"
                         
                         # Start upload IMMEDIATELY
                         res_msg = None
@@ -1366,8 +1368,9 @@ async def handle_messages(client, message):
                         logger.error(f"Critical error in uploader Ep {seq}: {e}")
                         pipeline_state["failed"] += 1
                     finally:
-                        # Delete status message after upload (fire-and-forget)
-                        asyncio.create_task(bg_delete(seq))
+                        if not cancel_flags.get(uid):
+                            # Delete status message after upload (fire-and-forget)
+                            asyncio.create_task(bg_delete(seq))
                         if seq in locked_episodes:
                             episode_lock.release()
                             locked_episodes.remove(seq)
@@ -1473,6 +1476,7 @@ async def handle_messages(client, message):
                         logger.error(f"Failed to process title for Ep {seq}: {e}")
                     # Send "Downloading..." in background (tracked for later edit/delete)
                     asyncio.create_task(bg_send(seq, f"Downloading...\n\n{episode_titles[seq]}"))
+                    msg_states[seq] = "Downloading"
 
                 async def download_retry_callback(seq, attempt_num):
                     """Called when download retries — edits the tracked message"""
@@ -1591,17 +1595,27 @@ async def handle_messages(client, message):
                         if not w.done():
                             w.cancel()
                             
-                    user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
-                    err_text = (
-                        f"Pipeline Killed...\n\n"
-                        f"`{uid}`\n{user_name}\n\n"
-                        f"`{t_show_id}`\n{story_title}\n\n"
-                        f"Episodes: {ep_text}\n\n"
-                        f"Reason...\n{type(e).__name__}"
-                    )
-                    try:
-                        await client.send_message(Config.ADMIN_GROUP, err_text)
-                    except: pass
+                    if cancel_flags.get(uid):
+                        for c_seq, c_msg in msg_objs.items():
+                            c_state = msg_states.get(c_seq, "Downloading")
+                            c_title = episode_titles.get(c_seq, f"Ep {c_seq}")
+                            if c_state == "Downloading":
+                                asyncio.create_task(bg_edit(c_seq, f"Downloading cancelled by user...\n\n{c_title}"))
+                            elif c_state == "Uploading":
+                                asyncio.create_task(bg_edit(c_seq, f"Uploading cancelled by user...\n\n{c_title}"))
+                            
+                    if not cancel_flags.get(uid) and not isinstance(e, asyncio.CancelledError):
+                        user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
+                        err_text = (
+                            f"Pipeline Killed...\n\n"
+                            f"`{uid}`\n{user_name}\n\n"
+                            f"`{t_show_id}`\n{story_title}\n\n"
+                            f"Episodes: {ep_text}\n\n"
+                            f"Reason...\n{type(e).__name__}"
+                        )
+                        try:
+                            await client.send_message(Config.ADMIN_GROUP, err_text)
+                        except: pass
                     break
         except BaseException as e:
             logger.error(f"Task loop killed: {type(e).__name__}: {e}")
