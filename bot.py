@@ -1239,7 +1239,7 @@ async def handle_messages(client, message):
                 thumb = thumb_path if os.path.exists(thumb_path) else None
                 artist_path = os.path.join(ARTIST_DIR, f"{uid}.txt")
 
-                upload_queue = asyncio.Queue(maxsize=1)
+                upload_queue = asyncio.Queue()
                 semaphore = asyncio.Semaphore(1)
                 discovery_done_event = asyncio.Event()
                 
@@ -1261,12 +1261,12 @@ async def handle_messages(client, message):
                             episode_lock.release()
                             locked_episodes.remove(seq)
                         semaphore.release()
-                        # Delete downloading msg and send error (fire-and-forget)
+                        # Delete downloading msg and send error serially
                         asyncio.create_task(bg_delete(seq))
                         if error_reason == "not_found":
-                            asyncio.create_task(bg_send_plain(f"Download Error...\n\nEpisode {seq} not found..."))
+                            await bg_send_plain(f"Download Error...\n\nEpisode {seq} not found...")
                         else:
-                            asyncio.create_task(bg_send_plain(f"Download Error...\n\n{ep_title}"))
+                            await bg_send_plain(f"Download Error...\n\n{ep_title}")
                         return
 
                     successful_downloads += 1
@@ -1389,8 +1389,6 @@ async def handle_messages(client, message):
                             upload_buffer[seq] = task
                             upload_queue.task_done()
                         except asyncio.TimeoutError:
-                            if cancel_flags.get(uid):
-                                break
                             pass
 
                 async def download_complete_callback(seq, filepath, duration, error_reason=None):
@@ -1399,7 +1397,8 @@ async def handle_messages(client, message):
                         pipeline_state["downloaded"] += 1
 
                 async def discovery_callback(seq):
-                    await semaphore.acquire()
+                    if not cancel_flags.get(uid):
+                        await semaphore.acquire()
                     discovered_episodes.add(seq)
                     pipeline_state["discovered"] += 1
                     
@@ -1468,7 +1467,15 @@ async def handle_messages(client, message):
                     )
                     
                     await upload_queue.put(None)
-                    await up_task
+                    try:
+                        await asyncio.wait_for(up_task, timeout=15)
+                    except asyncio.TimeoutError:
+                        logger.warning(f"Upload worker timed out for user {uid}, force cancelling...")
+                        up_task.cancel()
+                        try:
+                            await up_task
+                        except (asyncio.CancelledError, Exception):
+                            pass
                     
                     if t_chat_id == Config.ADMIN_GROUP:
                         if hasattr(downloader, 'last_debug_info') and t_show_id in downloader.last_debug_info:
