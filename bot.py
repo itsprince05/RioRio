@@ -1583,9 +1583,10 @@ async def handle_messages(client, message):
                         f"Episodes: {ep_text}\n\n"
                         f"Reason...\n{type(e).__name__}"
                     )
-                    try:
-                        await client.send_message(Config.ADMIN_GROUP, err_text)
-                    except: pass
+                    if type(e).__name__ != "CancelledError":
+                        try:
+                            await client.send_message(Config.ADMIN_GROUP, err_text)
+                        except: pass
                     break
         except BaseException as e:
             logger.error(f"Task loop killed: {type(e).__name__}: {e}")
