@@ -154,6 +154,7 @@ gen_state = {}
 user_processes = {}  # Per-user process tracking for cancel
 stop_messages = {}  # Track "Stopping process..." messages for edit
 active_tasks = {}  # Track asyncio tasks for instant cancel
+active_up_tasks = {} # Track upload tasks for instant cancel
 expired_notified = set()
 
 
@@ -947,10 +948,13 @@ async def cancel_cmd(client, message):
         
         stop_msg = await message.reply("Stopping process...")
         
-        # Forcefully cancel the background task to make it instant
+        # Forcefully cancel the background tasks to make it instant
         task = active_tasks.get(uid)
         if task:
             task.cancel()
+        up_task_bg = active_up_tasks.get(uid)
+        if up_task_bg:
+            up_task_bg.cancel()
             
         # Edit the message almost instantly
         try:
@@ -1473,6 +1477,7 @@ async def handle_messages(client, message):
                     asyncio.create_task(bg_edit(seq, f"Downloading...\nTrying {attempt_num}\n\n{ep_title}"))
 
                 up_task = asyncio.create_task(upload_worker())
+                active_up_tasks[uid] = up_task
 
                 try:
                     pipeline_state["status"] = "Downloading episodes..."
@@ -1555,7 +1560,6 @@ async def handle_messages(client, message):
                         except: pass
                         
                 except Exception as e:
-                    if 'up_task' in locals(): up_task.cancel()
                     logger.error(f"Pipeline error: {e}", exc_info=True)
                     user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
                     err_text = (
@@ -1569,7 +1573,6 @@ async def handle_messages(client, message):
                         await client.send_message(Config.ADMIN_GROUP, err_text)
                     except: pass
                 except BaseException as e:
-                    if 'up_task' in locals(): up_task.cancel()
                     # Catches CancelledError, KeyboardInterrupt, SystemExit etc.
                     logger.error(f"Pipeline killed: {type(e).__name__}: {e}")
                     user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
@@ -1588,6 +1591,7 @@ async def handle_messages(client, message):
             logger.error(f"Task loop killed: {type(e).__name__}: {e}")
         finally:
             active_tasks.pop(uid, None)
+            active_up_tasks.pop(uid, None)
             # Always clean cancel_flags (cancel_cmd keeps it set for us to detect)
             cancel_flags.pop(uid, None)
             if not _cleanup_done:
