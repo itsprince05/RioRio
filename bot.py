@@ -928,13 +928,15 @@ async def cancel_cmd(client, message):
             for proc in procs:
                 try: proc.kill()
                 except: pass
-            user_processes[uid] = []
         except Exception as e:
             logger.error(f"Error killing processes: {e}")
 
-        # Clear user's waiting queue
-        if uid in user_queues:
-            user_queues[uid].clear()
+        # Immediately clear ALL state so user is free to start new tasks
+        # The background task will detect cancel_flag and exit on its own
+        active_downloads.pop(uid, None)
+        user_queues.pop(uid, None)
+        cancel_flags.pop(uid, None)
+        user_processes.pop(uid, None)
         
         await message.reply("Stopping process...")
     else:
@@ -1491,20 +1493,9 @@ async def handle_messages(client, message):
                                 if os.path.exists(file_name): os.remove(file_name)
                             downloader.last_debug_info[t_show_id] = []
                     
-                    if cancel_flags.get(uid):
-                        # Clean up state IMMEDIATELY (synchronous, no awaits)
-                        # This prevents race condition where a new task arrives
-                        # during the reply await and gets destroyed by finally
-                        if uid in user_queues:
-                            user_queues[uid].clear()
-                        active_downloads.pop(uid, None)
-                        if chat_id != uid:
-                            active_downloads.pop(chat_id, None)
-                        cancel_flags.pop(uid, None)
-                        user_processes.pop(uid, None)
-                        user_queues.pop(uid, None)
+                    if cancel_flags.get(uid) or not active_downloads.get(uid):
+                        # cancel_cmd already cleaned up all state
                         _cleanup_done = True
-                        await t_msg.reply("Process stopped and waiting list is cleared...")
                         break
                     elif dl_result and dl_result.get("abort_reason") == "many_not_found":
                         await t_msg.reply("Many episodes are not found for this show, check your episode number and try again...\n\nTask Completed...")
