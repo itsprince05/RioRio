@@ -1570,6 +1570,20 @@ async def handle_messages(client, message):
                 except BaseException as e:
                     # Catches CancelledError, KeyboardInterrupt, SystemExit etc.
                     logger.error(f"Pipeline killed: {type(e).__name__}: {e}")
+                    
+                    # Cancel upload worker if still running
+                    if up_task and not up_task.done():
+                        up_task.cancel()
+                        try:
+                            await up_task
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                            
+                    # Cancel download workers if still running
+                    for w in getattr(downloader, 'active_workers', []):
+                        if not w.done():
+                            w.cancel()
+                            
                     user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
                     err_text = (
                         f"Pipeline Killed...\n\n"
