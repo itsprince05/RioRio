@@ -1166,6 +1166,7 @@ async def handle_messages(client, message):
             active_downloads[chat_id] = True
             
         task_counter = 0
+        _cleanup_done = False
 
         try:
             while user_queues[uid]:
@@ -1491,8 +1492,18 @@ async def handle_messages(client, message):
                             downloader.last_debug_info[t_show_id] = []
                     
                     if cancel_flags.get(uid):
+                        # Clean up state IMMEDIATELY (synchronous, no awaits)
+                        # This prevents race condition where a new task arrives
+                        # during the reply await and gets destroyed by finally
                         if uid in user_queues:
                             user_queues[uid].clear()
+                        active_downloads.pop(uid, None)
+                        if chat_id != uid:
+                            active_downloads.pop(chat_id, None)
+                        cancel_flags.pop(uid, None)
+                        user_processes.pop(uid, None)
+                        user_queues.pop(uid, None)
+                        _cleanup_done = True
                         await t_msg.reply("Process stopped and waiting list is cleared...")
                         break
                     elif dl_result and dl_result.get("abort_reason") == "many_not_found":
@@ -1564,12 +1575,13 @@ async def handle_messages(client, message):
         except BaseException as e:
             logger.error(f"Task loop killed: {type(e).__name__}: {e}")
         finally:
-            active_downloads.pop(uid, None)
-            if chat_id != uid:
-                active_downloads.pop(chat_id, None)
-            cancel_flags.pop(uid, None)
-            user_processes.pop(uid, None)
-            user_queues.pop(uid, None)
+            if not _cleanup_done:
+                active_downloads.pop(uid, None)
+                if chat_id != uid:
+                    active_downloads.pop(chat_id, None)
+                cancel_flags.pop(uid, None)
+                user_processes.pop(uid, None)
+                user_queues.pop(uid, None)
             logger.info(f"Cleanup complete for user {uid}")
     elif len(text) >= 3 and not text.startswith('/'):
         results = db.search_stories(text)
