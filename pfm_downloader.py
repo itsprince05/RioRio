@@ -571,7 +571,8 @@ class PFMDownloader:
         num_workers = 1
         workers = [asyncio.create_task(worker()) for _ in range(num_workers)]
         
-        self.current_show_title = "PocketFM"
+        try:
+            self.current_show_title = "PocketFM"
         current_seq = seq
         processed_metadata = set()
         empty_page_retries = 0
@@ -811,15 +812,19 @@ class PFMDownloader:
                         if next_ep in processed_metadata and next_ep not in still_missing:
                             consecutive_not_found = 0
 
-        # Signal that metadata discovery is complete
-        if discovery_done:
-            discovery_done.set()
+            # Signal that metadata discovery is complete
+            if discovery_done:
+                discovery_done.set()
 
-        # Signal Workers to Stop
-        for _ in range(num_workers):
-            await queue.put(None)
+            # Signal Workers to Stop
+            for _ in range(num_workers):
+                await queue.put(None)
+            
+            await asyncio.gather(*workers)
+            files.sort(key=lambda x: x[0])
+            return {"success": len(files) > 0, "files": files, "total": total_target, "abort_reason": abort_reason}
         
-        await asyncio.gather(*workers)
-        files.sort(key=lambda x: x[0])
-        return {"success": len(files) > 0, "files": files, "total": total_target, "abort_reason": abort_reason}
+        finally:
+            for w in workers:
+                w.cancel()
 
