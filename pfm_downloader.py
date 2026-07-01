@@ -177,11 +177,29 @@ class PFMDownloader:
             "authorization": f"Bearer {self.token.get('auth-token', '')}"
         }
         
-        details = await self._make_request(
-            'GET',
-            f'{self.base}/v2/content_api/show.get_details?show_id={show_id}&curr_ptr=0&info_level={info_level}',
-            headers=custom_headers
-        )
+        # Hit the API 5 times concurrently and find the max episodes_count
+        tasks = []
+        for _ in range(5):
+            tasks.append(self._make_request(
+                'GET',
+                f'{self.base}/v2/content_api/show.get_details?show_id={show_id}&curr_ptr=0&info_level={info_level}',
+                headers=custom_headers
+            ))
+        
+        responses = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        max_episodes_count = 0
+        best_details = None
+        
+        for details in responses:
+            if isinstance(details, dict) and details.get("status") == 1:
+                res_list = details.get("result", [])
+                if res_list:
+                    item = res_list[0]
+                    count = item.get("episodes_count", 0)
+                    if count >= max_episodes_count:
+                        max_episodes_count = count
+                        best_details = details
         
         # Grab the HD Image from the old endpoint
         hd_image = None
@@ -196,13 +214,13 @@ class PFMDownloader:
             if stories:
                 hd_image = stories[0].get("image_url")
         
-        if details and details.get("status") == 1:
-            res_list = details.get("result", [])
+        if best_details and best_details.get("status") == 1:
+            res_list = best_details.get("result", [])
             if res_list:
                 item = res_list[0]
                 return {
                     "title": item.get("show_title"),
-                    "total_episodes": item.get("episodes_count"),
+                    "total_episodes": max_episodes_count,
                     "show_id": show_id,
                     "image": hd_image if hd_image else item.get("image_url"),
                     "language": item.get("language", "Unknown").capitalize()
@@ -338,7 +356,7 @@ class PFMDownloader:
             return result
         return None, None
 
-    async def download_episodes(self,show_id,seq,end,output_dir,progress_callback=None,cancel_flag=None,on_complete=None,on_start=None,quality="192", discovery_done=None, info_level='max', process_tracker=None, on_not_found=None, on_retry=None):
+    async def download_episodes(self,show_id,seq,end,output_dir,progress_callback=None,cancel_flag=None,on_complete=None,on_start=None,quality="192", discovery_done=None, info_level='max', process_tracker=None, on_retry=None):
         total_target = end - seq + 1
         files=[]
         self.last_download_error = None
@@ -354,17 +372,20 @@ class PFMDownloader:
         
         async def worker():
             while True:
-                if cancel_flag and cancel_flag():
-                    break
-                
                 try:
                     item = await asyncio.wait_for(queue.get(), timeout=1.0)
                 except asyncio.TimeoutError:
+                    if cancel_flag and cancel_flag():
+                        break
                     continue
                 
                 if item is None:
                     queue.task_done()
                     break
+                
+                if cancel_flag and cancel_flag():
+                    queue.task_done()
+                    continue
                 
                 seq_num, ep = item
                 try:
@@ -678,7 +699,21 @@ class PFMDownloader:
                     if cursor_pos in gap_cursors_tried: continue
                     gap_cursors_tried.add(cursor_pos)
                     
-                    story_data = await self.get_detail(show_id, cursor_pos, info_level=info_level)
+                    story_data = None
+                    for _ in range(5):
+                        story_data = await self.get_detail(show_id, cursor_pos, info_level=info_level)
+                        if story_data and story_data.get("status") == 1:
+                            result = story_data.get("result", {})
+                            stories = result.get("stories", [])
+                            found = False
+                            for i in stories:
+                                if i.get("natural_sequence_number", 0) == miss_seq:
+                                    found = True
+                                    break
+                            if found:
+                                break
+                        await asyncio.sleep(1)
+                        
                     if not story_data or story_data.get("status") != 1:
                         continue
                     
@@ -758,16 +793,10 @@ class PFMDownloader:
                         consecutive_not_found += 1
                         processed_metadata.add(miss_ep)
                         
-                        if on_not_found:
-                            try:
-                                if asyncio.iscoroutinefunction(on_not_found): await on_not_found(miss_ep)
-                                else: on_not_found(miss_ep)
-                            except: pass
-                        
                         if on_complete:
                             try:
-                                if asyncio.iscoroutinefunction(on_complete): await on_complete(miss_ep, None, 0)
-                                else: on_complete(miss_ep, None, 0)
+                                if asyncio.iscoroutinefunction(on_complete): await on_complete(miss_ep, None, 0, "not_found")
+                                else: on_complete(miss_ep, None, 0, "not_found")
                             except: pass
                         
                         # Check if 3 consecutive episodes are not found
