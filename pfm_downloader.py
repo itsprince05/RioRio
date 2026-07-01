@@ -472,16 +472,23 @@ class PFMDownloader:
                                                     process_tracker.append(proc)
                                                 try:
                                                     await asyncio.wait_for(proc.wait(), timeout=300)
-                                                except:
-                                                    try: proc.kill(); await proc.wait()
-                                                    except: pass
+                                                except asyncio.CancelledError:
+                                                    raise
+                                                except Exception:
+                                                    pass
                                                 finally:
+                                                    if proc.returncode is None:
+                                                        try: proc.kill(); await proc.wait()
+                                                        except Exception: pass
                                                     if proc in self.current_processes:
                                                         self.current_processes.remove(proc)
                                                     if process_tracker is not None and proc in process_tracker:
                                                         process_tracker.remove(proc)
                                                 
-                                                if os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
+                                                if cancel_flag and cancel_flag():
+                                                    raise asyncio.CancelledError()
+                                                
+                                                if proc.returncode == 0 and os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
                                                     dur = 0
                                                     try:
                                                         pr = await asyncio.create_subprocess_exec(
@@ -525,16 +532,23 @@ class PFMDownloader:
                                             process_tracker.append(proc)
                                         try:
                                             await asyncio.wait_for(proc.wait(), timeout=300)
-                                        except:
-                                            try: proc.kill(); await proc.wait()
-                                            except: pass
+                                        except asyncio.CancelledError:
+                                            raise
+                                        except Exception:
+                                            pass
                                         finally:
+                                            if proc.returncode is None:
+                                                try: proc.kill(); await proc.wait()
+                                                except Exception: pass
                                             if proc in self.current_processes:
                                                 self.current_processes.remove(proc)
                                             if process_tracker is not None and proc in process_tracker:
                                                 process_tracker.remove(proc)
 
-                                        if os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
+                                        if cancel_flag and cancel_flag():
+                                            raise asyncio.CancelledError()
+
+                                        if proc.returncode == 0 and os.path.exists(m4a) and os.path.getsize(m4a) > 10000:
                                             dur = 0
                                             try:
                                                 pr = await asyncio.create_subprocess_exec(
