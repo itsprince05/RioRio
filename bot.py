@@ -154,7 +154,7 @@ gen_state = {}
 user_processes = {}  # Per-user process tracking for cancel
 stop_messages = {}  # Track "Stopping process..." messages for edit
 active_tasks = {}  # Track asyncio tasks for instant cancel
-active_up_tasks = {} # Track upload tasks for instant cancel
+active_upload_tasks = {}  # Track upload worker tasks for instant cancel
 expired_notified = set()
 
 
@@ -948,13 +948,13 @@ async def cancel_cmd(client, message):
         
         stop_msg = await message.reply("Stopping process...")
         
-        # Forcefully cancel the background tasks to make it instant
-        task = active_tasks.get(uid)
-        if task:
-            task.cancel()
-        up_task_bg = active_up_tasks.get(uid)
-        if up_task_bg:
-            up_task_bg.cancel()
+        # Forcefully cancel the background task AND upload task to make it instant
+        main_task = active_tasks.get(uid)
+        upload_task = active_upload_tasks.get(uid)
+        if upload_task:
+            upload_task.cancel()
+        if main_task:
+            main_task.cancel()
             
         # Edit the message almost instantly
         try:
@@ -1477,7 +1477,7 @@ async def handle_messages(client, message):
                     asyncio.create_task(bg_edit(seq, f"Downloading...\nTrying {attempt_num}\n\n{ep_title}"))
 
                 up_task = asyncio.create_task(upload_worker())
-                active_up_tasks[uid] = up_task
+                active_upload_tasks[uid] = up_task
 
                 try:
                     pipeline_state["status"] = "Downloading episodes..."
@@ -1575,6 +1575,13 @@ async def handle_messages(client, message):
                 except BaseException as e:
                     # Catches CancelledError, KeyboardInterrupt, SystemExit etc.
                     logger.error(f"Pipeline killed: {type(e).__name__}: {e}")
+                    # Cancel upload worker if still running
+                    if up_task and not up_task.done():
+                        up_task.cancel()
+                        try:
+                            await up_task
+                        except (asyncio.CancelledError, Exception):
+                            pass
                     user_name = t_msg.from_user.first_name if t_msg.from_user else "Unknown"
                     err_text = (
                         f"Pipeline Killed...\n\n"
@@ -1583,16 +1590,15 @@ async def handle_messages(client, message):
                         f"Episodes: {ep_text}\n\n"
                         f"Reason...\n{type(e).__name__}"
                     )
-                    if type(e).__name__ != "CancelledError":
-                        try:
-                            await client.send_message(Config.ADMIN_GROUP, err_text)
-                        except: pass
+                    try:
+                        await client.send_message(Config.ADMIN_GROUP, err_text)
+                    except: pass
                     break
         except BaseException as e:
             logger.error(f"Task loop killed: {type(e).__name__}: {e}")
         finally:
             active_tasks.pop(uid, None)
-            active_up_tasks.pop(uid, None)
+            active_upload_tasks.pop(uid, None)
             # Always clean cancel_flags (cancel_cmd keeps it set for us to detect)
             cancel_flags.pop(uid, None)
             if not _cleanup_done:
