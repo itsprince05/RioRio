@@ -1249,7 +1249,8 @@ async def handle_messages(client, message):
                 
                 async def perform_upload(task_data):
                     nonlocal successful_uploads, successful_downloads
-                    seq, filepath, duration = task_data
+                    seq, filepath, duration = task_data[:3]
+                    error_reason = task_data[3] if len(task_data) > 3 else None
                     ep_title = episode_titles.get(seq, f"Ep {seq}")
                     
                     if not filepath:
@@ -1262,7 +1263,10 @@ async def handle_messages(client, message):
                         semaphore.release()
                         # Delete downloading msg and send error (fire-and-forget)
                         asyncio.create_task(bg_delete(seq))
-                        asyncio.create_task(bg_send_plain(f"Download Error...\n\n{ep_title}"))
+                        if error_reason == "not_found":
+                            asyncio.create_task(bg_send_plain(f"Download Error...\n\nEpisode {seq} not found..."))
+                        else:
+                            asyncio.create_task(bg_send_plain(f"Download Error...\n\n{ep_title}"))
                         return
 
                     successful_downloads += 1
@@ -1351,7 +1355,7 @@ async def handle_messages(client, message):
                     upload_buffer = {}
                     next_seq_idx = 0
                     while True:
-                        if next_seq_idx < len(t_episodes):
+                        if not cancel_flags.get(uid) and next_seq_idx < len(t_episodes):
                             target_seq = t_episodes[next_seq_idx]
                             if target_seq in upload_buffer:
                                 t_data = upload_buffer.pop(target_seq)
@@ -1368,23 +1372,31 @@ async def handle_messages(client, message):
                             task = await asyncio.wait_for(upload_queue.get(), timeout=1.0)
                             if task is None:
                                 upload_queue.task_done()
-                                while next_seq_idx < len(t_episodes):
-                                    target_seq = t_episodes[next_seq_idx]
-                                    if target_seq in upload_buffer:
-                                        t_data = upload_buffer.pop(target_seq)
-                                        await perform_upload(t_data)
-                                    next_seq_idx += 1
+                                if not cancel_flags.get(uid):
+                                    while next_seq_idx < len(t_episodes):
+                                        target_seq = t_episodes[next_seq_idx]
+                                        if target_seq in upload_buffer:
+                                            t_data = upload_buffer.pop(target_seq)
+                                            await perform_upload(t_data)
+                                        next_seq_idx += 1
                                 break
                             
-                            seq, filepath, duration = task
+                            if cancel_flags.get(uid):
+                                upload_queue.task_done()
+                                continue
+                                
+                            seq = task[0]
                             upload_buffer[seq] = task
                             upload_queue.task_done()
                         except asyncio.TimeoutError:
+                            if cancel_flags.get(uid):
+                                break
                             pass
 
-                async def download_complete_callback(seq, filepath, duration):
-                    await upload_queue.put((seq, filepath, duration))
-                    pipeline_state["downloaded"] += 1
+                async def download_complete_callback(seq, filepath, duration, error_reason=None):
+                    await upload_queue.put((seq, filepath, duration, error_reason))
+                    if filepath:
+                        pipeline_state["downloaded"] += 1
 
                 async def discovery_callback(seq):
                     await semaphore.acquire()
@@ -1439,10 +1451,6 @@ async def handle_messages(client, message):
                     ep_title = episode_titles.get(seq, f"Ep {seq}")
                     asyncio.create_task(bg_edit(seq, f"Downloading...\nTrying {attempt_num}\n\n{ep_title}"))
 
-                async def not_found_callback(seq):
-                    """Called when an episode is not found in the API after retries"""
-                    asyncio.create_task(bg_send_plain(f"Episode {seq} not found..."))
-
                 up_task = asyncio.create_task(upload_worker())
 
                 try:
@@ -1456,8 +1464,7 @@ async def handle_messages(client, message):
                         progress_callback=discovery_callback, cancel_flag=lambda: cancel_flags.get(uid),
                         on_complete=download_complete_callback, on_start=start_download_callback,
                         discovery_done=discovery_done_event, info_level=get_user_info_level(uid, t_show_id),
-                        process_tracker=user_processes[uid], on_not_found=not_found_callback,
-                        on_retry=download_retry_callback
+                        process_tracker=user_processes[uid], on_retry=download_retry_callback
                     )
                     
                     await upload_queue.put(None)
@@ -1482,7 +1489,7 @@ async def handle_messages(client, message):
                         await t_msg.reply("Process stopped and waiting list is cleared...")
                         break
                     elif dl_result and dl_result.get("abort_reason") == "many_not_found":
-                        await t_msg.reply("Many episodes are not found for this show, check your episode number and try again...")
+                        await t_msg.reply("Many episodes are not found for this show, check your episode number and try again...\n\nTask Completed...")
                     elif successful_uploads > 0 or successful_downloads > 0:
                         # Build detailed task summary
                         total_requested = len(t_episodes)
