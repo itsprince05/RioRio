@@ -794,7 +794,7 @@ class PFMDownloader:
                                             if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
                                             else: progress_callback(s)
                                         except asyncio.CancelledError: raise
-                                    except Exception: pass
+                                        except Exception: pass
                     
                     for mapped_seq, mapped_s in gap_mapping.items():
                         if mapped_s not in processed_metadata:
