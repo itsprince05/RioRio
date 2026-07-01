@@ -152,6 +152,7 @@ user_queues = {}
 cancel_flags = {}
 gen_state = {}
 user_processes = {}  # Per-user process tracking for cancel
+stop_messages = {}  # Track "Stopping process..." messages for edit
 expired_notified = set()
 
 
@@ -937,7 +938,14 @@ async def cancel_cmd(client, message):
         user_queues.pop(uid, None)
         user_processes.pop(uid, None)
         
-        await message.reply("Stopping process...")
+        # Clear per-user UI state to prevent ghost auto-downloads
+        chat_id = message.chat.id
+        user_show.pop(chat_id, None)
+        user_awaiting_range.pop(chat_id, None)
+        user_is_all_download.pop(chat_id, None)
+        
+        stop_msg = await message.reply("Stopping process...")
+        stop_messages[uid] = stop_msg
     else:
         # Force-clean any leftover ghost state just in case
         active_downloads.pop(uid, None)
@@ -1495,6 +1503,12 @@ async def handle_messages(client, message):
                     if cancel_flags.get(uid) or not active_downloads.get(uid):
                         # cancel_cmd already cleaned up all state
                         _cleanup_done = True
+                        # Edit "Stopping process..." to confirm stopped
+                        stop_msg = stop_messages.pop(uid, None)
+                        if stop_msg:
+                            try:
+                                await stop_msg.edit("Process stopped and waiting list is cleared...")
+                            except: pass
                         break
                     elif dl_result and dl_result.get("abort_reason") == "many_not_found":
                         await t_msg.reply("Many episodes are not found for this show, check your episode number and try again...\n\nTask Completed...")
