@@ -394,7 +394,9 @@ class PFMDownloader:
                         try:
                             if asyncio.iscoroutinefunction(on_start): await on_start(seq_num, raw_name)
                             else: on_start(seq_num, raw_name)
-                        except: pass
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception: pass
                         
                     name = re.sub(r'[\\/*?\"<>|#@!\[\](){}^~`$%&+=;:]+', '', raw_name)
                     name = re.sub(r'[_*]+', '', name)
@@ -427,7 +429,9 @@ class PFMDownloader:
                             )
                             out, _ = await proc.communicate()
                             dur = int(float(out.decode().strip()))
-                        except:
+                        except asyncio.CancelledError:
+                            raise
+                        except Exception:
                             dur = int(duration) if duration else 0
                         
                         if on_complete:
@@ -445,7 +449,9 @@ class PFMDownloader:
                                 try:
                                     if asyncio.iscoroutinefunction(on_retry): await on_retry(seq_num, overall_attempt + 1)
                                     else: on_retry(seq_num, overall_attempt + 1)
-                                except: pass
+                                except asyncio.CancelledError:
+                                    raise
+                                except Exception: pass
                             
                             # --- Type 2: Try video MPD audio (non-DRM, priority 1) ---
                             if video_url and not download_success:
@@ -498,7 +504,9 @@ class PFMDownloader:
                                                         )
                                                         out, _ = await pr.communicate()
                                                         dur = int(float(out.decode().strip()))
-                                                    except:
+                                                    except asyncio.CancelledError:
+                                                        raise
+                                                    except Exception:
                                                         dur = int(duration) if duration else 0
                                                     
                                                     if on_complete:
@@ -558,7 +566,9 @@ class PFMDownloader:
                                                 )
                                                 out, _ = await pr.communicate()
                                                 dur = int(float(out.decode().strip()))
-                                            except:
+                                            except asyncio.CancelledError:
+                                                raise
+                                            except Exception:
                                                 dur = int(duration) if duration else 0
                                             
                                             if on_complete:
@@ -647,7 +657,8 @@ class PFMDownloader:
                             try:
                                 if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
                                 else: progress_callback(s)
-                            except: pass
+                            except asyncio.CancelledError: raise
+                            except Exception: pass
                     else:
                         self.story_meta = [i.get('created_by'), show_id, i.get('story_id')]
                         await self.add_story('subscribe_story')
@@ -670,7 +681,8 @@ class PFMDownloader:
                                 try:
                                     if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
                                     else: progress_callback(s)
-                                except: pass
+                                except asyncio.CancelledError: raise
+                                except Exception: pass
             
             for mapped_seq, mapped_s in mapping.items():
                 if mapped_s not in processed_metadata:
@@ -680,12 +692,14 @@ class PFMDownloader:
                         try:
                             if asyncio.iscoroutinefunction(progress_callback): await progress_callback(mapped_s)
                             else: progress_callback(mapped_s)
-                        except: pass
+                        except asyncio.CancelledError: raise
+                        except Exception: pass
                     if on_complete:
                         try:
                             if asyncio.iscoroutinefunction(on_complete): await on_complete(mapped_s, None, 0)
                             else: on_complete(mapped_s, None, 0)
-                        except: pass
+                        except asyncio.CancelledError: raise
+                        except Exception: pass
 
             # Advance cursor using max natural_sequence_number seen in this batch
             # This prevents cursor drift when sequence numbers don't align with page offsets
@@ -755,7 +769,8 @@ class PFMDownloader:
                                     try:
                                         if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
                                         else: progress_callback(s)
-                                    except: pass
+                                    except asyncio.CancelledError: raise
+                                    except Exception: pass
                             else:
                                 self.story_meta = [i.get('created_by'), show_id, i.get('story_id')]
                                 await self.add_story('subscribe_story')
@@ -778,7 +793,8 @@ class PFMDownloader:
                                         try:
                                             if asyncio.iscoroutinefunction(progress_callback): await progress_callback(s)
                                             else: progress_callback(s)
-                                        except: pass
+                                        except asyncio.CancelledError: raise
+                                    except Exception: pass
                     
                     for mapped_seq, mapped_s in gap_mapping.items():
                         if mapped_s not in processed_metadata:
@@ -788,12 +804,14 @@ class PFMDownloader:
                                 try:
                                     if asyncio.iscoroutinefunction(progress_callback): await progress_callback(mapped_s)
                                     else: progress_callback(mapped_s)
-                                except: pass
+                                except asyncio.CancelledError: raise
+                                except Exception: pass
                             if on_complete:
                                 try:
                                     if asyncio.iscoroutinefunction(on_complete): await on_complete(mapped_s, None, 0)
                                     else: on_complete(mapped_s, None, 0)
-                                except: pass
+                                except asyncio.CancelledError: raise
+                                except Exception: pass
                 
                 still_missing = [ep_num for ep_num in range(seq, end + 1) if ep_num not in processed_metadata]
                 if still_missing:
@@ -812,7 +830,8 @@ class PFMDownloader:
                             try:
                                 if asyncio.iscoroutinefunction(on_complete): await on_complete(miss_ep, None, 0, "not_found")
                                 else: on_complete(miss_ep, None, 0, "not_found")
-                            except: pass
+                            except asyncio.CancelledError: raise
+                            except Exception: pass
                         
                         # Check if 3 consecutive episodes are not found
                         if consecutive_not_found >= 3:
