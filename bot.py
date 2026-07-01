@@ -153,6 +153,7 @@ cancel_flags = {}
 gen_state = {}
 user_processes = {}  # Per-user process tracking for cancel
 stop_messages = {}  # Track "Stopping process..." messages for edit
+active_tasks = {}  # Track asyncio tasks for instant cancel
 expired_notified = set()
 
 
@@ -945,7 +946,17 @@ async def cancel_cmd(client, message):
         user_is_all_download.pop(chat_id, None)
         
         stop_msg = await message.reply("Stopping process...")
-        stop_messages[uid] = stop_msg
+        
+        # Forcefully cancel the background task to make it instant
+        task = active_tasks.get(uid)
+        if task:
+            task.cancel()
+            
+        # Edit the message almost instantly
+        try:
+            await asyncio.sleep(0.5)
+            await stop_msg.edit("Stopping process...\n\nProcess stopped and waiting list is cleared...")
+        except: pass
     else:
         # Force-clean any leftover ghost state just in case
         active_downloads.pop(uid, None)
@@ -1176,6 +1187,7 @@ async def handle_messages(client, message):
             
         task_counter = 0
         _cleanup_done = False
+        active_tasks[uid] = asyncio.current_task()
 
         try:
             while user_queues[uid]:
@@ -1503,12 +1515,6 @@ async def handle_messages(client, message):
                     if cancel_flags.get(uid) or not active_downloads.get(uid):
                         # cancel_cmd already cleaned up all state
                         _cleanup_done = True
-                        # Edit "Stopping process..." to confirm stopped
-                        stop_msg = stop_messages.pop(uid, None)
-                        if stop_msg:
-                            try:
-                                await stop_msg.edit("Process stopped and waiting list is cleared...")
-                            except: pass
                         break
                     elif dl_result and dl_result.get("abort_reason") == "many_not_found":
                         await t_msg.reply("Many episodes are not found for this show, check your episode number and try again...\n\nTask Completed...")
@@ -1579,6 +1585,7 @@ async def handle_messages(client, message):
         except BaseException as e:
             logger.error(f"Task loop killed: {type(e).__name__}: {e}")
         finally:
+            active_tasks.pop(uid, None)
             # Always clean cancel_flags (cancel_cmd keeps it set for us to detect)
             cancel_flags.pop(uid, None)
             if not _cleanup_done:
