@@ -861,10 +861,10 @@ class PFMDownloader:
                             except asyncio.CancelledError: raise
                             except Exception: pass
                         
-                        # Check if 3 consecutive episodes are not found
-                        if consecutive_not_found >= 3:
+                        # Check if 5 consecutive episodes are not found
+                        if consecutive_not_found >= 5:
                             abort_reason = "many_not_found"
-                            logger.error(f"3 consecutive episodes not found. Aborting download for show {show_id}.")
+                            logger.error(f"5 consecutive episodes not found. Aborting download for show {show_id}.")
                             break
                         
                         # Reset consecutive counter if there's a found episode between missing ones
