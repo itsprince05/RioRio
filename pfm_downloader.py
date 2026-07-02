@@ -356,7 +356,7 @@ class PFMDownloader:
             return result
         return None, None
 
-    async def download_episodes(self,show_id,seq,end,output_dir,progress_callback=None,cancel_flag=None,on_complete=None,on_start=None,quality="192", discovery_done=None, info_level='max', process_tracker=None, on_retry=None):
+    async def download_episodes(self,show_id,seq,end,output_dir,progress_callback=None,cancel_flag=None,on_complete=None,on_start=None,quality="192", discovery_done=None, info_level='max', process_tracker=None, on_retry=None, on_search=None):
         total_target = end - seq + 1
         files=[]
         self.last_download_error = None
@@ -729,20 +729,40 @@ class PFMDownloader:
                     gap_cursors_tried.add(cursor_pos)
                     
                     story_data = None
-                    for _ in range(5):
+                    
+                    # Notify UI: searching for this episode
+                    if on_search:
+                        try:
+                            if asyncio.iscoroutinefunction(on_search): await on_search(miss_seq, "searching")
+                            else: on_search(miss_seq, "searching")
+                        except asyncio.CancelledError: raise
+                        except Exception: pass
+                    
+                    found_in_retry = False
+                    for retry_num in range(5):
+                        if cancel_flag and cancel_flag(): break
                         story_data = await self.get_detail(show_id, cursor_pos, info_level=info_level)
                         if story_data and story_data.get("status") == 1:
                             result = story_data.get("result", {})
                             stories = result.get("stories", [])
-                            found = False
                             for i in stories:
                                 if i.get("natural_sequence_number", 0) == miss_seq:
-                                    found = True
+                                    found_in_retry = True
                                     break
-                            if found:
+                            if found_in_retry:
                                 break
                         await asyncio.sleep(1)
-                        
+                    
+                    if not found_in_retry:
+                        # Notify UI: episode not found after 5 retries
+                        if on_search:
+                            try:
+                                if asyncio.iscoroutinefunction(on_search): await on_search(miss_seq, "not_found")
+                                else: on_search(miss_seq, "not_found")
+                            except asyncio.CancelledError: raise
+                            except Exception: pass
+                        continue
+                    
                     if not story_data or story_data.get("status") != 1:
                         continue
                     
@@ -752,6 +772,14 @@ class PFMDownloader:
                     
                     gap_sub_count = 0
                     gap_mapping = {}
+                    
+                    # Notify UI: episode found
+                    if on_search:
+                        try:
+                            if asyncio.iscoroutinefunction(on_search): await on_search(miss_seq, "found")
+                            else: on_search(miss_seq, "found")
+                        except asyncio.CancelledError: raise
+                        except Exception: pass
                     
                     for i in stories:
                         s = i.get("natural_sequence_number", 0)
