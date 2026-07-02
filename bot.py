@@ -1490,14 +1490,27 @@ async def handle_messages(client, message):
                     if cancel_flags.get(uid):
                         raise asyncio.CancelledError()
                     if status == "searching":
+                        # Wait for any ongoing upload to finish before showing search msg
+                        await episode_lock.acquire()
+                        locked_episodes.add(seq)
+                        if cancel_flags.get(uid):
+                            episode_lock.release()
+                            locked_episodes.discard(seq)
+                            raise asyncio.CancelledError()
                         asyncio.create_task(bg_send(seq, f"Searching Ep - {seq}"))
                         msg_states[seq] = "Searching"
                     elif status == "found":
-                        # Will be updated to Downloading by start_download_callback
-                        pass
+                        # Release lock — start_download_callback will re-acquire it
+                        if seq in locked_episodes:
+                            episode_lock.release()
+                            locked_episodes.discard(seq)
                     elif status == "not_found":
                         asyncio.create_task(bg_edit(seq, f"Ep {seq} not found..."))
                         msg_states[seq] = "NotFound"
+                        # Release lock so next episode can proceed
+                        if seq in locked_episodes:
+                            episode_lock.release()
+                            locked_episodes.discard(seq)
 
                 up_task = asyncio.create_task(upload_worker())
 
@@ -1545,7 +1558,22 @@ async def handle_messages(client, message):
                         _cleanup_done = True
                         break
                     elif dl_result and dl_result.get("abort_reason") == "many_not_found":
-                        await t_msg.reply("Many episodes are not found for this show, check your episode number and try again...\n\nTask Completed...")
+                        total_requested = len(t_episodes)
+                        dl_failed_count = len(download_failed_eps)
+                        dl_failed_nums = f" ({', '.join(str(e) for e in sorted(download_failed_eps))})" if dl_failed_count > 0 else ""
+                        ul_failed_count = len(upload_failed_eps)
+                        ul_failed_nums = f" ({', '.join(str(e) for e in sorted(upload_failed_eps))})" if ul_failed_count > 0 else ""
+                        
+                        summary = (
+                            f"Many episodes are not found for this show, check your episode number and try again...\n\n"
+                            f"Task Completed...\n\n"
+                            f"Total - {total_requested}\n\n"
+                            f"Downloaded - {successful_downloads}\n"
+                            f"Failed - {dl_failed_count}{dl_failed_nums}\n\n"
+                            f"Uploaded - {successful_uploads}\n"
+                            f"Failed - {ul_failed_count}{ul_failed_nums}"
+                        )
+                        await t_msg.reply(summary)
                     elif successful_uploads > 0 or successful_downloads > 0:
                         # Build detailed task summary
                         total_requested = len(t_episodes)
