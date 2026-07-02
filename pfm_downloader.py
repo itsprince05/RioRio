@@ -719,6 +719,7 @@ class PFMDownloader:
                 
                 # Process missing episodes in small batches by fetching pages around them
                 gap_cursors_tried = set()
+                gap_consecutive_not_found = 0
                 for miss_seq in missing_episodes:
                     if cancel_flag and cancel_flag(): break
                     if miss_seq in processed_metadata: continue  # Could have been found in a previous gap-fill iteration
@@ -761,7 +762,26 @@ class PFMDownloader:
                                 else: on_search(miss_seq, "not_found")
                             except asyncio.CancelledError: raise
                             except Exception: pass
+                        
+                        # Count as failed
+                        processed_metadata.add(miss_seq)
+                        if on_complete:
+                            try:
+                                if asyncio.iscoroutinefunction(on_complete): await on_complete(miss_seq, None, 0, "not_found")
+                                else: on_complete(miss_seq, None, 0, "not_found")
+                            except asyncio.CancelledError: raise
+                            except Exception: pass
+                        
+                        # Track consecutive not-found for early abort
+                        gap_consecutive_not_found += 1
+                        if gap_consecutive_not_found >= 3:
+                            abort_reason = "many_not_found"
+                            logger.error(f"3 consecutive episodes not found in gap-fill. Aborting for show {show_id}.")
+                            break
                         continue
+                    
+                    # Found — reset consecutive counter
+                    gap_consecutive_not_found = 0
                     
                     if not story_data or story_data.get("status") != 1:
                         continue
@@ -861,10 +881,10 @@ class PFMDownloader:
                             except asyncio.CancelledError: raise
                             except Exception: pass
                         
-                        # Check if 5 consecutive episodes are not found
-                        if consecutive_not_found >= 5:
+                        # Check if 3 consecutive episodes are not found
+                        if consecutive_not_found >= 3:
                             abort_reason = "many_not_found"
-                            logger.error(f"5 consecutive episodes not found. Aborting download for show {show_id}.")
+                            logger.error(f"3 consecutive episodes not found. Aborting download for show {show_id}.")
                             break
                         
                         # Reset consecutive counter if there's a found episode between missing ones
