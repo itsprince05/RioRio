@@ -1284,11 +1284,13 @@ async def handle_messages(client, message):
                             episode_lock.release()
                             locked_episodes.remove(seq)
                         semaphore.release()
-                        # Delete downloading msg and send error serially
-                        asyncio.create_task(bg_delete(seq))
                         if error_reason == "not_found":
-                            await bg_send_plain(f"Download Error...\n\nEpisode {seq} not found...")
+                            # search_callback already edited msg to "Ep N not found..."
+                            # Just leave it as-is, no delete or extra msg needed
+                            pass
                         else:
+                            # Delete downloading msg and send error
+                            asyncio.create_task(bg_delete(seq))
                             await bg_send_plain(f"Download Error...\n\n{ep_title}")
                         return
 
@@ -1483,6 +1485,20 @@ async def handle_messages(client, message):
                     ep_title = episode_titles.get(seq, f"Ep {seq}")
                     asyncio.create_task(bg_edit(seq, f"Downloading...\nTrying {attempt_num}\n\n{ep_title}"))
 
+                async def search_callback(seq, status):
+                    """Called during gap-fill: searching/found/not_found"""
+                    if cancel_flags.get(uid):
+                        raise asyncio.CancelledError()
+                    if status == "searching":
+                        asyncio.create_task(bg_send(seq, f"Searching Ep - {seq}"))
+                        msg_states[seq] = "Searching"
+                    elif status == "found":
+                        # Will be updated to Downloading by start_download_callback
+                        pass
+                    elif status == "not_found":
+                        asyncio.create_task(bg_edit(seq, f"Ep {seq} not found..."))
+                        msg_states[seq] = "NotFound"
+
                 up_task = asyncio.create_task(upload_worker())
 
                 try:
@@ -1496,7 +1512,8 @@ async def handle_messages(client, message):
                         progress_callback=discovery_callback, cancel_flag=lambda: cancel_flags.get(uid),
                         on_complete=download_complete_callback, on_start=start_download_callback,
                         discovery_done=discovery_done_event, info_level=get_user_info_level(uid, t_show_id),
-                        process_tracker=user_processes[uid], on_retry=download_retry_callback
+                        process_tracker=user_processes[uid], on_retry=download_retry_callback,
+                        on_search=search_callback
                     )
                     
                     await upload_queue.put(None)
